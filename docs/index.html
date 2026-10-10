@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 7.3.7 | Out of Server </title>
+  <title>MyNus 7.3.8 | Fix tone&logs </title>
 
 
  <style>
@@ -5519,7 +5519,8 @@ Public License instead of this License.
 <audio id="masterAudio"></audio>
 
 
-<script src="rubberband.js"></script>
+<!-- Pitch library path: change src here when moving or replacing the compatible engine. -->
+<script id="mynusPitchLibrary" src="libs/rubberband.js"></script>
 <script>
 
 
@@ -5529,10 +5530,11 @@ Public License instead of this License.
 
 (function installLocalConsole(){
  const limit=3000,entries=[];let dirty=false;
+ function cleanLog(value){return String(value).replace(/\x1b\[[0-?]*[ -/]*[@-~]/g,'');}
  function text(value){if(value instanceof Error)return value.stack||value.message;if(typeof value==='string')return value;try{return JSON.stringify(value)??String(value);}catch(_){return String(value);}}
  function refresh(){const area=document.getElementById('mnConsoleText');if(!area||!dirty||document.getElementById('mnConsolePanel')?.hidden)return;const follow=area.scrollHeight-area.scrollTop-area.clientHeight<35;const start=area.selectionStart,end=area.selectionEnd;area.value=entries.join('\n');area.setSelectionRange(Math.min(start,area.value.length),Math.min(end,area.value.length));if(follow)area.scrollTop=area.scrollHeight;dirty=false;}
- for(const level of ['log','info','warn','error','debug']){const native=console[level].bind(console);console[level]=(...args)=>{native(...args);entries.push('['+new Date().toISOString()+'] '+level.toUpperCase()+': '+args.map(text).join(' ').slice(0,16000));if(entries.length>limit)entries.splice(0,entries.length-limit);dirty=true;refresh();};}
- window.mynusLocalConsole={appendServer(record){entries.push('['+record.time+'] SERVER '+record.level+': '+record.message);if(entries.length>limit)entries.splice(0,entries.length-limit);dirty=true;refresh();},refresh(){dirty=true;refresh();},text:()=>entries.join('\n'),clear(){entries.length=0;dirty=true;refresh();}};
+ for(const level of ['log','info','warn','error','debug']){const native=console[level].bind(console);console[level]=(...args)=>{native(...args);entries.push('['+new Date().toISOString()+'] '+level.toUpperCase()+': '+cleanLog(args.map(text).join(' ')).slice(0,16000));if(entries.length>limit)entries.splice(0,entries.length-limit);dirty=true;refresh();};}
+ window.mynusLocalConsole={appendServer(record){const message=cleanLog(record.message);if(/^(?:\s*\* |Press CTRL|WARNING: This is a development server|={5,})/.test(message)||/"(?:GET|POST) [^"]+HTTP\/[^"]+" (?:200|304) /.test(message)||message.includes('/favicon.ico'))return;entries.push('['+record.time+'] SERVER '+record.level+': '+message);if(entries.length>limit)entries.splice(0,entries.length-limit);dirty=true;refresh();},refresh(){dirty=true;refresh();},text:()=>entries.join('\n'),clear(){entries.length=0;dirty=true;refresh();}};
  window.addEventListener('error',event=>console.error('UNCAUGHT ERROR:',event.message,event.filename+':'+event.lineno+':'+event.colno,event.error||''));
  window.addEventListener('unhandledrejection',event=>console.error('UNHANDLED PROMISE REJECTION:',event.reason));
 })();
@@ -7218,13 +7220,9 @@ async function startSeparation(restoreRequest = null) {
         }
 
 
-        throw new Error(
-
-          errorData.details
-          || errorData.error
-          || "Server error"
-
-        );
+        const code=response.status;
+        const message=code===401?'Sign in or register to continue.':code===403?'You do not have permission to start separation.':(errorData.details||errorData.error||response.statusText||'Request failed.');
+        const failure=new Error('Separation error ('+code+'): '+message);failure.httpStatus=code;throw failure;
 
       }
 
@@ -7685,7 +7683,7 @@ studio.style.display =
           await abortCurrentSeparation(run);
         }
         console.error(error);
-        status.textContent = "Processing error: " + error.message +
+        status.textContent = (error.httpStatus ? error.message : "Separation error: " + error.message) +
           (run.abortError ? " — " + run.abortError + " Job: " + run.jobId : "");
         status.className = "progress-status error";
         studio.style.display = run.previousStudioDisplay;
@@ -11114,7 +11112,7 @@ function ensureMixAudioGraph() {
   applyFxSettings(
     "master"
   );
-  installLocalToneGraph().catch(showLocalToneError);
+  // Pitch is prepared on demand; direct audio needs no AudioWorklet.
 
 }
 
@@ -13731,7 +13729,10 @@ function exportAudioBounds(track, scope, fullDuration) {
 }
 async function shiftExportAudio(buffer,semitones,context){
  if(!semitones)return buffer;
- const workerUrl=URL.createObjectURL(new Blob(['const MYNUS_RUBBERBAND_SOURCE = '+JSON.stringify(MYNUS_RUBBERBAND_SOURCE)+';\n',"let ExportProcessor;\nself.AudioWorkletProcessor=class{constructor(){this.port={onmessage:null,postMessage(){}};}};\nself.registerProcessor=(name,klass)=>{ExportProcessor=klass;};\nself.onmessage=async event=>{\n try {\n  const {channels,sampleRate:rate,semitones}=event.data; self.sampleRate=rate;\n  (0,eval)(MYNUS_RUBBERBAND_SOURCE);\n  async function engine(){\n   const p=new ExportProcessor();p.port.onmessage({data:JSON.stringify(['quality',true])});\n   p.port.onmessage({data:JSON.stringify(['pitch',Math.pow(2,semitones/12)])});\n   p.port.onmessage({data:JSON.stringify(['tempo',1])});\n   p.process([[new Float32Array(128),new Float32Array(128)]],[[new Float32Array(128),new Float32Array(128)]]);\n   const began=Date.now();while(!p.api?.kernel){if(Date.now()-began>20000)throw Error('Tone initialization timed out');await new Promise(r=>setTimeout(r,10));}\n   for(let i=0;i<Math.ceil(rate/128);i++)p.process([[new Float32Array(128),new Float32Array(128)]],[[new Float32Array(128),new Float32Array(128)]]);\n   return p;\n  }\n  // Measure the processor's delay at the selected pitch, then compensate it.\n  const calibration=await engine();let peak=0,delay=0;\n  for(let offset=0;offset<rate;offset+=128){\n   const input=new Float32Array(128);if(offset===0)input[0]=0.5;\n   const out=[new Float32Array(128),new Float32Array(128)];calibration.process([[input,input]],[out]);\n   for(let i=0;i<128;i++)if(Math.abs(out[0][i])>peak){peak=Math.abs(out[0][i]);delay=offset+i;}\n  }\n  if(!peak)throw Error('Tone delay calibration failed');calibration.close();\n  const p=await engine(),length=channels[0].length;\n  const result=[new Float32Array(length),new Float32Array(length)];\n  for(let offset=0;offset<length+delay+128;offset+=128){\n   const input=[new Float32Array(128),new Float32Array(128)];\n   for(let ch=0;ch<2;ch++)input[ch].set((channels[ch]||channels[0]).subarray(offset,offset+128));\n   const out=[new Float32Array(128),new Float32Array(128)];p.process([input],[out]);\n   for(let i=0;i<128;i++){const dst=offset+i-delay;if(dst>=0&&dst<length)for(let ch=0;ch<2;ch++)result[ch][dst]=out[ch][i];}\n  }\n  p.close();self.postMessage({channels:result},result.map(c=>c.buffer));\n }catch(error){self.postMessage({error:error.message});}\n};"],{type:'text/javascript'}));
+ const engine=window.MyNusPitchEngine;
+ if(engine?.shift)return await engine.shift(buffer,semitones,context);
+ if(!engine?.source)throw Error('Pitch library unavailable. Check the path in mynusPitchLibrary.');
+ const workerUrl=URL.createObjectURL(new Blob(['const MYNUS_RUBBERBAND_SOURCE = '+JSON.stringify(engine.source)+';\n',"let ExportProcessor;\nself.AudioWorkletProcessor=class{constructor(){this.port={onmessage:null,postMessage(){}};}};\nself.registerProcessor=(name,klass)=>{ExportProcessor=klass;};\nself.onmessage=async event=>{\n try {\n  const {channels,sampleRate:rate,semitones}=event.data; self.sampleRate=rate;\n  (0,eval)(MYNUS_RUBBERBAND_SOURCE);\n  async function engine(){\n   const p=new ExportProcessor();p.port.onmessage({data:JSON.stringify(['quality',true])});\n   p.port.onmessage({data:JSON.stringify(['pitch',Math.pow(2,semitones/12)])});\n   p.port.onmessage({data:JSON.stringify(['tempo',1])});\n   p.process([[new Float32Array(128),new Float32Array(128)]],[[new Float32Array(128),new Float32Array(128)]]);\n   const began=Date.now();while(!p.api?.kernel){if(Date.now()-began>20000)throw Error('Tone initialization timed out');await new Promise(r=>setTimeout(r,10));}\n   for(let i=0;i<Math.ceil(rate/128);i++)p.process([[new Float32Array(128),new Float32Array(128)]],[[new Float32Array(128),new Float32Array(128)]]);\n   return p;\n  }\n  // Measure the processor's delay at the selected pitch, then compensate it.\n  const calibration=await engine();let peak=0,delay=0;\n  for(let offset=0;offset<rate;offset+=128){\n   const input=new Float32Array(128);if(offset===0)input[0]=0.5;\n   const out=[new Float32Array(128),new Float32Array(128)];calibration.process([[input,input]],[out]);\n   for(let i=0;i<128;i++)if(Math.abs(out[0][i])>peak){peak=Math.abs(out[0][i]);delay=offset+i;}\n  }\n  if(!peak)throw Error('Tone delay calibration failed');calibration.close();\n  const p=await engine(),length=channels[0].length;\n  const result=[new Float32Array(length),new Float32Array(length)];\n  for(let offset=0;offset<length+delay+128;offset+=128){\n   const input=[new Float32Array(128),new Float32Array(128)];\n   for(let ch=0;ch<2;ch++)input[ch].set((channels[ch]||channels[0]).subarray(offset,offset+128));\n   const out=[new Float32Array(128),new Float32Array(128)];p.process([input],[out]);\n   for(let i=0;i<128;i++){const dst=offset+i-delay;if(dst>=0&&dst<length)for(let ch=0;ch<2;ch++)result[ch][dst]=out[ch][i];}\n  }\n  p.close();self.postMessage({channels:result},result.map(c=>c.buffer));\n }catch(error){self.postMessage({error:error.message});}\n};"],{type:'text/javascript'}));
  const worker=new Worker(workerUrl);
  try{
   const channels=Array.from({length:Math.min(2,buffer.numberOfChannels)},(_,ch)=>buffer.getChannelData(ch).slice());
@@ -15890,45 +15891,67 @@ function updateLyricsFullScreenView(currentTime) {
 
 
 
-const localToneNodes = new Map();
+// Prepared pitch audio: raw project media is never replaced in project storage.
+const preparedToneMedia = new Map();
 let localToneGraphPromise = null;
-async function installLocalToneGraph() {
-  if (!mixAudioContext) return;
-  if (localToneGraphPromise) return localToneGraphPromise;
-  localToneGraphPromise = (async () => {
-    if (!mixAudioContext.audioWorklet) throw new Error("Local Tone requires AudioWorklet support.");
-    const moduleUrl = URL.createObjectURL(new Blob([MYNUS_RUBBERBAND_SOURCE], {type:"text/javascript"}));
-    try { await mixAudioContext.audioWorklet.addModule(moduleUrl); }
-    finally { URL.revokeObjectURL(moduleUrl); }
-    const node = new AudioWorkletNode(mixAudioContext,"rubberband-processor",{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[2],channelCount:2,channelCountMode:"explicit"});
-    node.port.postMessage(JSON.stringify(["quality",true]));
-    const ready = new Promise((resolve,reject) => {
-      const timer = setTimeout(() => reject(new Error("Rubber Band initialization timed out")),20000);
-      node.port.onmessage = event => { if(event.data?.type === "ready") {clearTimeout(timer);resolve();} };
-      node.onprocessorerror = () => {clearTimeout(timer);reject(new Error("Rubber Band audio processor failed"));};
-    });
-    // All non-Original audio reaches this bus; Original has its own playback path.
-    masterFadeGainNode.disconnect(mixAudioContext.destination);
-    masterFadeGainNode.disconnect(masterAnalyserNode);
-    masterFadeGainNode.disconnect(masterRecordBus);
-    masterFadeGainNode.connect(node);
-    node.connect(mixAudioContext.destination);
-    node.connect(masterAnalyserNode);
-    node.connect(masterRecordBus);
-    localToneNodes.set("mix",node);
-    updateLocalToneParameters();
-    if(mixAudioContext.state === "suspended") await mixAudioContext.resume();
-    await ready;
-  })();
-  try { await localToneGraphPromise; }
-  catch(error) { throw error; }
+let toneGeneration = 0;
+function clearPreparedToneMedia(){
+ toneGeneration++;
+ for(const item of preparedToneMedia.values())if(item.url)URL.revokeObjectURL(item.url);
+ preparedToneMedia.clear();localToneGraphPromise=null;
 }
-function updateLocalToneParameters() {
-  for(const node of localToneNodes.values()) {
-    node.port.postMessage(JSON.stringify(["tempo",1]));
-    node.port.postMessage(JSON.stringify(["pitch",Math.pow(2,lyricsFullScreenPitchSemitones/12)]));
+async function installLocalToneGraph(){
+ if(localToneGraphPromise)return localToneGraphPromise;
+ const generation=toneGeneration;
+ localToneGraphPromise=(async()=>{
+  const ctx=mixAudioContext;
+  if(!ctx)return;
+  while(generation===toneGeneration){
+   const shift=lyricsFullScreenPitchSemitones;
+   const tracks=stemIds.filter(id=>generatedTrackURLs[id]||currentStemURLs[id]||preparedToneMedia.has(id));
+   if(savedMasterBlob||masterBlob)tracks.push('master');
+   const cursor=getCurrentTime();
+   const changed=[];
+   for(const id of tracks){
+    const source=await getTrackBlob(id);if(!source.blob)continue;
+    const audio=id==='master'?masterAudio:stemAudio[id];
+    let entry=preparedToneMedia.get(id);
+    if(!entry||entry.blob!==source.blob){
+     // Blob reads may produce a new object; URL identifies unchanged stem sources.
+     const key=id==='master'?source.blob:(generatedTrackURLs[id]||currentStemURLs[id]);
+     if(!entry||entry.key!==key){
+      if(entry?.url)URL.revokeObjectURL(entry.url);
+      entry={blob:source.blob,key,rawURL:audio.src,shift:0,url:null};preparedToneMedia.set(id,entry);
+     }
+    }
+    if(entry.shift===shift)continue;
+    if(!changed.length)pauseAll();
+    status.textContent='Preparing tone '+(shift>0?'+':'')+shift+' — '+id+'…';
+    status.className='progress-status process';
+    let url=entry.rawURL;
+    if(shift){
+     const raw=await ctx.decodeAudioData(await entry.blob.arrayBuffer());
+     const result=await shiftExportAudio(raw,shift,ctx);
+     url=URL.createObjectURL(audioBufferToWavBlob(result));
+    }
+    if(generation!==toneGeneration||shift!==lyricsFullScreenPitchSemitones){if(shift)URL.revokeObjectURL(url);break;}
+    changed.push({id,entry,audio,url,shift});
+   }
+   if(generation!==toneGeneration){for(const item of changed)if(item.shift)URL.revokeObjectURL(item.url);return;}
+   if(shift!==lyricsFullScreenPitchSemitones){for(const item of changed)if(item.shift)URL.revokeObjectURL(item.url);continue;}
+   for(const item of changed){
+    const old=item.entry.url;item.audio.src=item.url;item.audio.load();
+    await new Promise((resolve,reject)=>{if(item.audio.readyState>=1)return resolve();item.audio.addEventListener('loadedmetadata',resolve,{once:true});item.audio.addEventListener('error',()=>reject(Error('Prepared track failed: '+item.id)),{once:true});});
+    item.entry.url=item.shift?item.url:null;item.entry.shift=item.shift;
+    if(old)URL.revokeObjectURL(old);
+   }
+   if(changed.length){setGlobalCursorTime(cursor);status.textContent='Tone ready: '+(shift>0?'+':'')+shift;status.className='progress-status success';}
+   return;
   }
+ })();
+ try{await localToneGraphPromise;}finally{localToneGraphPromise=null;}
 }
+function updateLocalToneParameters() {}
 function showLocalToneError(error) {
   console.error("Local Tone:",error);
   status.textContent = "Tone unavailable: " + error.message;
@@ -21820,7 +21843,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "7.3.7",
+    version: "7.3.8",
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
     current_tonic: currentTrackTonic(),
@@ -22722,7 +22745,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "7.3.7";
+const MYNUS_CLIENT_VERSION = "7.3.8";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -22830,6 +22853,7 @@ async function failProjectLoader(error) {
 
 // Сохранение текущего Project и связанных данных.
 function clearProjectState() {
+  clearPreparedToneMedia();
   releaseLocalSeparatedTracks();
   // Очищаем ВСЁ текущее рабочее состояние Project/файла.
   // PlayList намеренно исключён: playlist.json/current/queue/history
