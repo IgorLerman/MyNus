@@ -1,5 +1,5 @@
 # ========================================
-#  Out of Server | 7.3.7 
+#  Fix tone&logs | 7.3.8 
 # ========================================
 
 # ========================================
@@ -46,7 +46,7 @@ def _publish_server_line(message, level):
     global _server_log_sequence
     with _server_log_condition:
         _server_log_sequence += 1
-        _server_log_records.append({"id": _server_log_sequence, "time": time.strftime("%Y-%m-%d %H:%M:%S"), "level": level, "message": message[:16000]})
+        _server_log_records.append({"id": _server_log_sequence, "time": time.strftime("%Y-%m-%d %H:%M:%S"), "level": level, "message": re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", message)[:16000]})
         _server_log_condition.notify_all()
 
 class _MirroredServerStream:
@@ -183,7 +183,7 @@ def debug_load_trace():
         print(f"  details         = {details}", flush=True)
     print("-" * 72, flush=True)
 
-    return jsonify({"ok": True, "version": "7.3.7", "trace_id": trace_id})
+    return jsonify({"ok": True, "version": "7.3.8", "trace_id": trace_id})
 
 
 # ========================================
@@ -203,6 +203,17 @@ def local_rubberband_library():
         max_age=0
     )
 
+
+
+from werkzeug.exceptions import HTTPException
+@app.errorhandler(HTTPException)
+def json_http_error(error):
+    message = "Sign in or register to continue." if error.code == 401 else error.description
+    return jsonify(error=message, code=error.code), error.code
+
+@app.route("/libs/rubberband.js", methods=["GET"])
+def pitch_library_in_subfolder():
+    return send_from_directory(os.path.join(BASE_DIR, "libs"), "rubberband.js", mimetype="application/javascript", max_age=0)
 
 @app.route("/")
 def index():
@@ -2726,7 +2737,7 @@ def reject_legacy_project_storage():
         path == "/saved-projects" or path.startswith("/saved-projects/") or
         path.startswith("/opened-projects/") or path.startswith("/playlist/") or
         path == "/lyrics/save-current"):
-        return jsonify(error="Project save/load is local in MyNus 7.3.7"), 410
+        return jsonify(error="Project save/load is local in MyNus 7.3.8"), 410
 
 if __name__ == "__main__":
     with open(__file__, "r", encoding="utf-8-sig") as f:
