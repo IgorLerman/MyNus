@@ -1,5 +1,5 @@
 # ========================================
-#  FinalTune | 7.5.0 
+#  BaseUpDate | 7.6.0 
 # ========================================
 
 # ========================================
@@ -71,7 +71,7 @@ def desktop_response_headers(response):
         response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Last-Event-ID, X-MyNus-Load-Trace, X-MyNus-Load-Track"
         response.headers["Access-Control-Expose-Headers"] = "X-MyNus-Session"
         response.vary.add("Origin")
-    if _desktop_api_path(request.path) and request.method != "OPTIONS":
+    if request.path in ("/api/auth/login","/api/auth/register","/api/auth/logout","/api/current-user") and request.method != "OPTIONS":
         serializer = app.session_interface.get_signing_serializer(app)
         if serializer:
             response.headers["X-MyNus-Session"] = serializer.dumps(dict(session)) if session.get("user_id") else ""
@@ -125,8 +125,7 @@ for _handler in logging.getLogger("werkzeug").handlers:
 
 @app.route("/debug/server-logs")
 def server_log_stream():
-    if request.remote_addr not in ("127.0.0.1", "::1") and not current_user_id():
-        return jsonify(error="Sign in to view server logs"), 401
+    current_user_id()
     try:
         raw_cursor = request.headers.get("Last-Event-ID") or request.args.get("after") or "latest"
         with _server_log_condition:
@@ -138,11 +137,15 @@ def server_log_stream():
         nonlocal cursor
         yield ": connected\n\n"
         while True:
+            if not session_is_active760():
+                return
             with _server_log_condition:
                 batch = [record for record in _server_log_records if record["id"] > cursor]
                 if not batch:
                     _server_log_condition.wait(timeout=15)
                     batch = [record for record in _server_log_records if record["id"] > cursor]
+            if not session_is_active760():
+                return
             if not batch:
                 yield ": keepalive\n\n"
             for record in batch:
@@ -230,7 +233,7 @@ def debug_load_trace():
         print(f"  details         = {details}", flush=True)
     print("-" * 72, flush=True)
 
-    return jsonify({"ok": True, "version": "7.4.3", "trace_id": trace_id})
+    return jsonify({"ok": True, "version": "7.6.0", "trace_id": trace_id})
 
 
 # ========================================
@@ -253,7 +256,7 @@ def json_http_error(error):
 
 @app.route("/", methods=["GET"])
 def server_status():
-    return jsonify(service="MyNus Server", version="7.4.3", status="ready")
+    return jsonify(service="MyNus Server", version="7.6.0", status="ready")
 
 
 # ========================================
@@ -850,6 +853,7 @@ def run_demucs(job_id, input_path, job_result_dir, lyrics_language="auto"):
             lyrics=lyrics,
             tonic=tonic
         )
+        Path(job_result_dir, "result.json").write_text(json.dumps(result,ensure_ascii=False),encoding="utf-8")
     except SeparationAborted:
         pass
     except Exception as exc:
@@ -903,14 +907,7 @@ def abort_separation(job_id):
 
 @app.route("/progress/<job_id>")
 def progress(job_id):
-    uid = current_user_id()
-    job = jobs.get(job_id)
-    control = job_controls.get(job_id)
-    if job is None or control is None or job.get("user_id") != uid:
-        return jsonify(error="Job not found"), 404
-    with control["lock"]:
-        # Process handles/locks/events live in job_controls, never in JSON.
-        return jsonify(dict(job))
+    return jsonify(progress_payload760(job_id,current_user_id()))
 
 
 # ========================================
@@ -921,21 +918,30 @@ def progress(job_id):
     "/results/<job_id>/<filename>"
 )
 # Локальная серверная операция этого блока.
-def result_file(
-    job_id,
-    filename
-):
-
-    folder = os.path.join(
-        RESULT_DIR,
-        job_id
-    )
-
-
-    return send_from_directory(
-        folder,
-        filename
-    )
+def result_file(job_id,filename):
+    uid=current_user_id()
+    if filename not in ('vocals.mp3','drums.mp3','bass.mp3','guitar.mp3','piano.mp3','other.mp3'):
+        abort(404,description='Result file not found.')
+    with _media_lock760:
+        row=separation_row760(job_id,uid)
+        if row['files_deleted_at']:abort(410,description='Separation files were deleted.')
+        if row['status']!='completed':abort(409,description='Separation is not complete.')
+        allowed,plan=result_access760(row)
+        if not allowed:return jsonify(error='Payment for this separation or an active plan is required to download.',code=402,separation_id=row['separation_id']),402
+        folder=_safe_media_folder760(RESULT_DIR,job_id)
+        _media_readers760[job_id]=_media_readers760.get(job_id,0)+1
+        try:response=send_from_directory(folder,filename)
+        except BaseException:
+            _media_readers760[job_id]-=1
+            raise
+    def release():
+        with _media_lock760:
+            count=_media_readers760.get(job_id,1)-1
+            if count:_media_readers760[job_id]=count
+            else:_media_readers760.pop(job_id,None)
+    from werkzeug.wsgi import ClosingIterator
+    response.response=ClosingIterator(response.response,release)
+    return response
 
 
 # ========================================
@@ -2183,6 +2189,9 @@ def utc_now():
 
 
 def current_user_id():
+    if not session_is_active760():
+        session.clear()
+        abort(401, description="Sign in or register to continue.")
     uid = session.get("user_id")
     with db_connection() as db:
         row = db.execute(
@@ -2354,9 +2363,7 @@ def register_user():
         except sqlite3.IntegrityError:
             return jsonify(error="This email is already registered."), 409
         del pending_registrations[email]
-    session.clear()
-    session.permanent = False
-    session["user_id"] = uid
+    start_session760(uid)
     return jsonify(ok=True, user_id=uid)
 
 
@@ -2371,15 +2378,17 @@ def login_email():
         row = db.execute("SELECT user_id FROM users WHERE lower(trim(email))=?", (email,)).fetchone()
     if row is None:
         return jsonify(error="This email is not registered. Use REG."), 404
-    session.clear()
-    session.permanent = False
-    session["user_id"] = row["user_id"]
+    start_session760(row["user_id"])
     return jsonify(ok=True, user_id=row["user_id"])
 
 
 @app.route("/api/auth/logout", methods=["POST"])
 def logout_user():
     auth_request_data()
+    sid=session.get("session_id")
+    if sid:
+        with db_connection() as db:
+            db.execute("UPDATE sessions SET revoked_at=? WHERE session_id=? AND user_id=? AND revoked_at IS NULL",(_utc760(),sid,session.get("user_id")))
     session.clear()
     return jsonify(ok=True)
 
@@ -2724,7 +2733,247 @@ def reject_legacy_project_storage():
         path == "/saved-projects" or path.startswith("/saved-projects/") or
         path.startswith("/opened-projects/") or path.startswith("/playlist/") or
         path == "/lyrics/save-current"):
-        return jsonify(error="Project save/load is local in MyNus 7.4.3"), 410
+        return jsonify(error="Project save/load is local in MyNus 7.6.0"), 410
+
+
+# 7.6.0 schema extension; SQLite backup before the first migration.
+from datetime import datetime, timezone, timedelta
+def columns(db,table):
+    return {row[1] for row in db.execute(f'PRAGMA table_info({table})')}
+def migrate(db):
+    db.execute('PRAGMA foreign_keys=ON')
+    db.execute('BEGIN IMMEDIATE')
+    try:
+        if 'max_active_sessions' not in columns(db,'users'):
+            db.execute('ALTER TABLE users ADD COLUMN max_active_sessions INTEGER NOT NULL DEFAULT 3 CHECK(max_active_sessions >= 1)')
+        db.execute('''CREATE TABLE IF NOT EXISTS sessions (
+            session_id TEXT PRIMARY KEY CHECK(length(session_id) >= 32),
+            user_id INTEGER NOT NULL REFERENCES users(user_id),
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+            expires_at TEXT NOT NULL,
+            revoked_at TEXT,
+            last_seen_at TEXT,
+            CHECK(expires_at > created_at),
+            CHECK(revoked_at IS NULL OR revoked_at >= created_at),
+            UNIQUE(session_id,user_id)
+        )''')
+        db.execute('CREATE INDEX IF NOT EXISTS sessions_user_active ON sessions(user_id,revoked_at,expires_at)')
+        if 'separation_id' not in columns(db,'payments'):
+            db.execute('''ALTER TABLE payments ADD COLUMN separation_id INTEGER
+                REFERENCES separations(separation_id)
+                CHECK(separation_id IS NULL OR subscription_id IS NULL)''')
+        db.execute('CREATE INDEX IF NOT EXISTS payments_separation_access ON payments(user_id,separation_id,status)')
+        # ALTER TABLE cannot add a composite foreign key to an existing table.
+        # These guards enforce payment ownership for both insert and update.
+        for action in ('INSERT','UPDATE'):
+            db.execute(f'''CREATE TRIGGER IF NOT EXISTS payments_separation_owner_{action.lower()}
+                BEFORE {action} ON payments
+                WHEN NEW.separation_id IS NOT NULL AND NOT EXISTS (
+                    SELECT 1 FROM separations
+                    WHERE separation_id=NEW.separation_id AND user_id=NEW.user_id
+                )
+                BEGIN SELECT RAISE(ABORT,'Payment separation must belong to the same user'); END''')
+        db.execute('''CREATE TRIGGER IF NOT EXISTS separations_payment_owner_update
+            BEFORE UPDATE OF user_id ON separations
+            WHEN EXISTS (SELECT 1 FROM payments WHERE separation_id=OLD.separation_id AND user_id<>NEW.user_id)
+            BEGIN SELECT RAISE(ABORT,'Cannot change owner of a separation with linked payments'); END''')
+        if 'delete_after' not in columns(db,'separations'):
+            db.execute('ALTER TABLE separations ADD COLUMN delete_after TEXT')
+        if 'files_deleted_at' not in columns(db,'separations'):
+            db.execute('ALTER TABLE separations ADD COLUMN files_deleted_at TEXT')
+        db.execute('CREATE INDEX IF NOT EXISTS separations_cleanup ON separations(files_deleted_at,delete_after)')
+        db.execute('''UPDATE separations
+            SET delete_after=strftime('%Y-%m-%dT%H:%M:%fZ',finished_at,'+24 hours')
+            WHERE delete_after IS NULL AND finished_at IS NOT NULL
+              AND status IN ('completed','failed','cancelled')''')
+        # New completion timestamps written by the existing server get a deadline.
+        db.execute('''CREATE TRIGGER IF NOT EXISTS separations_cleanup_deadline_update
+            AFTER UPDATE OF status,finished_at ON separations
+            WHEN NEW.status IN ('completed','failed','cancelled')
+              AND NEW.finished_at IS NOT NULL AND NEW.delete_after IS NULL
+            BEGIN UPDATE separations
+                SET delete_after=strftime('%Y-%m-%dT%H:%M:%fZ',NEW.finished_at,'+24 hours')
+                WHERE separation_id=NEW.separation_id; END''')
+        db.execute('''CREATE TRIGGER IF NOT EXISTS separations_cleanup_deadline_insert
+            AFTER INSERT ON separations
+            WHEN NEW.status IN ('completed','failed','cancelled')
+              AND NEW.finished_at IS NOT NULL AND NEW.delete_after IS NULL
+            BEGIN UPDATE separations
+                SET delete_after=strftime('%Y-%m-%dT%H:%M:%fZ',NEW.finished_at,'+24 hours')
+                WHERE separation_id=NEW.separation_id; END''')
+        if db.execute('PRAGMA foreign_key_check').fetchall():
+            raise RuntimeError('Foreign key validation failed')
+        if db.execute('PRAGMA quick_check').fetchone()[0]!='ok':
+            raise RuntimeError('Integrity validation failed')
+        db.commit()
+    except BaseException:
+        db.rollback()
+        raise
+def ensure_schema760():
+    db=sqlite3.connect(DB_PATH.resolve().as_uri()+'?mode=rw',uri=True,timeout=30)
+    try:
+        needed=not columns(db,'sessions') or 'max_active_sessions' not in columns(db,'users') or 'separation_id' not in columns(db,'payments') or 'files_deleted_at' not in columns(db,'separations')
+        if needed:
+            backup=DB_PATH.with_name('mynus-before-7.6.0-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')+'.db')
+            with sqlite3.connect(backup) as target:db.backup(target)
+            print('[DATABASE] Backup: '+str(backup),flush=True)
+        migrate(db)
+    finally:db.close()
+ensure_schema760()
+# MyNus 7.6.0: sessions, paid result access and scheduled media cleanup.
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
+
+def _utc760():
+    return datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00','Z')
+
+def session_is_active760():
+    sid,uid=session.get('session_id'),session.get('user_id')
+    if not sid or uid is None:return False
+    with db_connection() as db:
+        row=db.execute('SELECT 1 FROM sessions WHERE session_id=? AND user_id=? AND revoked_at IS NULL AND expires_at>?',(sid,uid,_utc760())).fetchone()
+    return row is not None
+
+@app.before_request
+def protected_operations760():
+    public={'/','/api/auth/login','/api/auth/register','/api/auth/register-code','/api/auth/logout'}
+    if request.method=='OPTIONS' or request.path in public:return
+    if not session_is_active760():
+        session.clear()
+        abort(401,description='Sign in or register to use server functions.')
+
+def start_session760(uid):
+    now=_utc760();expires=(datetime.now(timezone.utc)+timedelta(hours=12)).isoformat(timespec='milliseconds').replace('+00:00','Z')
+    sid=secrets.token_hex(32)
+    with db_connection() as db:
+        db.execute('BEGIN IMMEDIATE')
+        limit=db.execute('SELECT max_active_sessions FROM users WHERE user_id=?',(uid,)).fetchone()[0]
+        count=db.execute('SELECT COUNT(*) FROM sessions WHERE user_id=? AND revoked_at IS NULL AND expires_at>?',(uid,now)).fetchone()[0]
+        if count>=limit:abort(409,description='Active session limit reached. Sign out on another device and try again.')
+        db.execute('INSERT INTO sessions(session_id,user_id,created_at,expires_at,last_seen_at) VALUES(?,?,?,?,?)',(sid,uid,now,expires,now))
+    session.clear();session.permanent=False;session.update(user_id=uid,session_id=sid)
+
+def separation_row760(job_id,uid):
+    with db_connection() as db:
+        row=db.execute('SELECT * FROM separations WHERE user_id=? AND client_request_id=?',(uid,'job:'+job_id)).fetchone()
+    if row is None:abort(404,description='Separation not found.')
+    return dict(row)
+
+def result_access760(row):
+    uid,sid=row['user_id'],row['separation_id']
+    with db_connection() as db:
+        plan=db.execute("SELECT 1 FROM subscriptions WHERE user_id=? AND status='active' AND julianday(starts_at)<=julianday('now') AND julianday(ends_at)>julianday('now') LIMIT 1",(uid,)).fetchone()
+        paid=db.execute("SELECT 1 FROM payments WHERE user_id=? AND separation_id=? AND status='paid' AND refunded_minor=0 LIMIT 1",(uid,sid)).fetchone()
+    return bool(plan or paid),bool(plan)
+
+_media_lock760=threading.RLock()
+_media_readers760={}
+
+def progress_payload760(job_id,uid):
+    row=separation_row760(job_id,uid)
+    if row['files_deleted_at']:abort(410,description='Separation files have expired and were deleted.')
+    job=jobs.get(job_id)
+    if job is not None:
+        if job.get('user_id')!=uid:abort(404)
+        with job_controls[job_id]['lock']:payload=dict(job)
+    else:
+        metadata=Path(RESULT_DIR)/job_id/'result.json'
+        if not metadata.is_file():abort(404,description='Result is unavailable. Restarted unfinished jobs cannot be resumed.')
+        payload=json.loads(metadata.read_text(encoding='utf-8'))
+        payload.update(status='done',progress=100,user_id=uid)
+    allowed,plan=result_access760(row)
+    if payload.get('status')=='done' and row['status']!='completed':
+        # Publish completion to the DB before the client immediately downloads.
+        with db_connection() as db:
+            db.execute("UPDATE separations SET status='completed',finished_at=COALESCE(finished_at,?) WHERE separation_id=?",(_utc760(),row['separation_id']))
+        row=separation_row760(job_id,uid)
+    payload.update(job_id=job_id,separation_id=row['separation_id'],download_allowed=allowed,active_plan=plan,delete_after=row['delete_after'])
+    return payload
+
+@app.route('/api/separations')
+def list_separations760():
+    uid=current_user_id()
+    with db_connection() as db:
+        rows=db.execute('SELECT separation_id,client_request_id,source_name,status,finished_at,delete_after,files_deleted_at FROM separations WHERE user_id=? ORDER BY separation_id DESC LIMIT 100',(uid,)).fetchall()
+    return jsonify(separations=[dict(row) for row in rows])
+
+@app.route('/api/account/sessions')
+def list_sessions760():
+    uid=current_user_id()
+    with db_connection() as db:
+        rows=db.execute('SELECT session_id,created_at,expires_at,revoked_at FROM sessions WHERE user_id=? ORDER BY created_at DESC LIMIT 100',(uid,)).fetchall()
+        limit=db.execute('SELECT max_active_sessions FROM users WHERE user_id=?',(uid,)).fetchone()[0]
+    return jsonify(sessions=[dict(row) for row in rows],current_session_id=session['session_id'],max_active_sessions=limit)
+
+@app.route('/api/account/sessions/revoke',methods=['POST'])
+def revoke_session760():
+    uid=current_user_id();data=auth_request_data();sid=str(data.get('session_id') or '')
+    with db_connection() as db:
+        count=db.execute('UPDATE sessions SET revoked_at=COALESCE(revoked_at,?) WHERE user_id=? AND session_id=?',(_utc760(),uid,sid)).rowcount
+    if not count:abort(404,description='Session not found.')
+    if sid==session.get('session_id'):session.clear()
+    return jsonify(ok=True)
+
+@app.errorhandler(401)
+@app.errorhandler(403)
+@app.errorhandler(404)
+@app.errorhandler(409)
+@app.errorhandler(410)
+def access_error760(error):
+    return jsonify(error=error.description,code=error.code),error.code
+
+def _safe_media_folder760(root,job_id):
+    if not re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',job_id):raise ValueError('Invalid job directory')
+    base=Path(root).resolve();folder=base/job_id
+    if folder.is_symlink() or folder.resolve().parent!=base:raise ValueError('Unsafe media directory')
+    return folder
+
+def _remove_media_folder760(folder):
+    # Reject links/junctions anywhere in a job folder before recursive deletion.
+    if any(p.is_symlink() or (hasattr(p,'is_junction') and p.is_junction()) for p in folder.rglob('*')):raise ValueError('Linked media directory')
+    shutil.rmtree(folder)
+
+def cleanup_media760():
+    now=_utc760();removed=0
+    with db_connection() as db:
+        rows=db.execute("SELECT separation_id,client_request_id FROM separations WHERE status IN ('completed','failed','cancelled') AND delete_after IS NOT NULL AND delete_after<=? AND files_deleted_at IS NULL",(now,)).fetchall()
+    for row in rows:
+        job_id=row['client_request_id'].removeprefix('job:')
+        try:
+            with _media_lock760:
+                control=job_controls.get(job_id)
+                if _media_readers760.get(job_id,0) or (control and not control['finished'].is_set()):continue
+                for root in (UPLOAD_DIR,RESULT_DIR):
+                    folder=_safe_media_folder760(root,job_id)
+                    if folder.exists():_remove_media_folder760(folder)
+                with db_connection() as db:db.execute('UPDATE separations SET files_deleted_at=? WHERE separation_id=?',(now,row['separation_id']))
+                jobs.pop(job_id,None);job_controls.pop(job_id,None);removed+=1
+        except Exception:app.logger.exception('Cleanup failed for separation %s',row['separation_id'])
+    # Legacy untracked uploads/results/exports: keep recent or active folders.
+    with db_connection() as db:known={r[0].removeprefix('job:') for r in db.execute('SELECT client_request_id FROM separations')}
+    cutoff=time.time()-86400
+    for root in (UPLOAD_DIR,RESULT_DIR,EXPORT_DIR):
+        for candidate in Path(root).iterdir():
+            if not candidate.is_dir() or candidate.name in known or candidate.name in jobs:continue
+            try:
+                folder=_safe_media_folder760(root,candidate.name)
+                latest=max([folder.stat().st_mtime]+[p.stat().st_mtime for p in folder.rglob('*')])
+                if latest<=cutoff:
+                    with _media_lock760:
+                        if not _media_readers760.get(candidate.name,0):_remove_media_folder760(folder);removed+=1
+            except Exception:app.logger.exception('Cleanup skipped legacy media %s',candidate.name)
+    print('[CLEANUP] Removed '+str(removed)+' expired media tasks.',flush=True)
+
+def cleanup_worker760():
+    # Startup catches cleanup missed while the server was stopped.
+    cleanup_media760()
+    previous=datetime.now().date()
+    while True:
+        time.sleep(30)
+        today=datetime.now().date()
+        if today!=previous:
+            cleanup_media760();previous=today
+
 
 if __name__ == "__main__":
     with open(__file__, "r", encoding="utf-8-sig") as f:
@@ -2736,6 +2985,7 @@ if __name__ == "__main__":
     print("=" * 72 + "\n")
    
 
+    threading.Thread(target=cleanup_worker760,daemon=True).start()
     try:
         app.run(
     host="0.0.0.0",
