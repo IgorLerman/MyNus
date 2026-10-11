@@ -1,5 +1,5 @@
 # ========================================
-#  Old Interface Cleaning Fix | 7.4.1 
+#  FinalTune | 7.5.0 
 # ========================================
 
 # ========================================
@@ -128,7 +128,9 @@ def server_log_stream():
     if request.remote_addr not in ("127.0.0.1", "::1") and not current_user_id():
         return jsonify(error="Sign in to view server logs"), 401
     try:
-        cursor = max(0, int(request.headers.get("Last-Event-ID") or request.args.get("after") or 0))
+        raw_cursor = request.headers.get("Last-Event-ID") or request.args.get("after") or "latest"
+        with _server_log_condition:
+            cursor = _server_log_sequence if raw_cursor == "latest" else max(0, int(raw_cursor))
     except ValueError:
         cursor = 0
     @stream_with_context
@@ -228,7 +230,7 @@ def debug_load_trace():
         print(f"  details         = {details}", flush=True)
     print("-" * 72, flush=True)
 
-    return jsonify({"ok": True, "version": "7.4.1", "trace_id": trace_id})
+    return jsonify({"ok": True, "version": "7.4.3", "trace_id": trace_id})
 
 
 # ========================================
@@ -251,7 +253,7 @@ def json_http_error(error):
 
 @app.route("/", methods=["GET"])
 def server_status():
-    return jsonify(service="MyNus Server", version="7.4.1", status="ready")
+    return jsonify(service="MyNus Server", version="7.4.3", status="ready")
 
 
 # ========================================
@@ -2722,7 +2724,7 @@ def reject_legacy_project_storage():
         path == "/saved-projects" or path.startswith("/saved-projects/") or
         path.startswith("/opened-projects/") or path.startswith("/playlist/") or
         path == "/lyrics/save-current"):
-        return jsonify(error="Project save/load is local in MyNus 7.4.1"), 410
+        return jsonify(error="Project save/load is local in MyNus 7.4.3"), 410
 
 if __name__ == "__main__":
     with open(__file__, "r", encoding="utf-8-sig") as f:
