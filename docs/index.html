@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>FinalTune | 7.5.0 </title>
+  <title>BaseUpDate&LogOut | 7.6.0 </title>
 
 
  <style>
@@ -3444,7 +3444,7 @@ window.addEventListener('keydown',event=>{
    if(message.error)request.reject(new Error(message.error));else request.resolve(message.result);
  });
  function request(action,data={}) {
-   if(!available())return Promise.reject(new Error('Update MyNus.exe to 7.4.3 to use the project folder.'));
+   if(!available())return Promise.reject(new Error('Update MyNus.exe to 7.6.0 to use the project folder.'));
    const id=crypto.randomUUID();
    return new Promise((resolve,reject)=>{
      const timer=setTimeout(()=>{pending.delete(id);reject(new Error('Desktop file operation timed out.'));},1800000);
@@ -3480,7 +3480,7 @@ window.addEventListener('keydown',event=>{
 
 </script>
 <style>
-/* 7.4.3 compact track headings and desktop header */
+/* 7.6.0 compact track headings and desktop header */
 .track-controls{grid-template-columns:max-content minmax(0,1fr)!important;}
 .track-title{white-space:nowrap;display:flex;align-items:center;gap:4px;}
 .track-title .track-tonic{display:inline!important;margin:0!important;}
@@ -3497,6 +3497,25 @@ window.addEventListener('keydown',event=>{
 #mynusTonePopup[hidden]{display:none;}#mynusTonePopup button{display:flex;justify-content:space-between;width:100%;margin:4px 0;}
 html.mynus-native-header #mnConsoleButton,html.mynus-native-header #mnLoginButton{display:none!important;}
 #mnLoginDialog{position:fixed;top:42px;right:12px;left:auto;margin:0;max-height:calc(100vh - 58px);overflow:auto;}
+</style><style>.master-controls{display:flex!important;flex-direction:column;align-items:stretch;gap:4px;}
+.master-controls .track-buttons{display:flex;align-self:stretch;width:100%;gap:4px;margin:0;}
+.master-controls .track-buttons button{flex:1 1 0;min-width:0;height:20px;padding:2px 3px;line-height:14px;white-space:nowrap;}
+.master-title-row{white-space:nowrap;}
+.master-timeline-heading{display:flex;align-items:center;justify-content:center;gap:20px;margin:6px 0 3px;min-height:18px;}
+.master-timeline-heading .master-state{margin:0;font-size:12px;}
+.master-timeline-heading .master-timeline-title{margin:0;width:auto;}
+.track:has(.timeline-scroll[data-track="master"]){min-height:0!important;}
+.track:has(.timeline-scroll[data-track="master"]) .timeline-scroll{min-height:0;height:128px;}
+.karaoke-controls-group{padding-top:4px!important;padding-bottom:4px!important;gap:4px!important;}
+.track:has(.karaoke-controls-group){min-height:60px!important;}
+.track:has(.karaoke-controls-group) .lyrics-panel{min-height:60px!important;padding-top:4px;padding-bottom:4px;}
+.master-timeline-row{margin-top:2px!important;margin-bottom:2px!important;}
+.transport-stack.transport-bottom{margin-top:4px!important;}
+#mnConsolePanel .mnConsoleActions{display:flex;flex-wrap:nowrap;gap:6px;}
+#mnConsolePanel .mnConsoleActions button{flex:1;min-width:0;white-space:nowrap;padding:5px 6px;}
+#mnConsolePanel #mnConsoleNotice{background:#e6e6e6;color:#555;padding:6px;font-size:11px;overflow-wrap:anywhere;}
+.result-access760{position:fixed;z-index:25000;left:50%;top:50%;transform:translate(-50%,-50%);background:#fff;color:#222;border:1px solid #ccc;border-radius:8px;box-shadow:0 4px 30px #0004;padding:20px;width:min(440px,calc(100vw - 48px));}
+.result-access760 button{margin:8px 6px 0 0;}
 </style></head>
 
 
@@ -4398,9 +4417,7 @@ html.mynus-native-header #mnConsoleButton,html.mynus-native-header #mnLoginButto
 
         </div>
 
-        <div id="masterState" class="master-state">
-          Empty
-        </div>
+        
 
       </div>
 
@@ -4464,9 +4481,7 @@ html.mynus-native-header #mnConsoleButton,html.mynus-native-header #mnLoginButto
          MASTER TIMELINE
     ======================================== -->
 
-    <div class="master-timeline-title">
-      Master Timeline
-    </div>
+    <div class="master-timeline-heading"><div id="masterState" class="master-state">Empty</div><div class="master-timeline-title">Master Timeline</div></div>
 
     <div class="master-timeline-row">
 
@@ -5360,30 +5375,59 @@ function showMynusRequestFailure(path, code, details) {
  console.error(message);
  return message;
 }
+let mynusAuthEpoch760=0;
+const mynusRequests760=new Set();
+let mynusLoggedOut760=!mynusSessionToken;
+function detachServer760(){
+ mynusAuthEpoch760++;mynusLoggedOut760=true;mynusSessionToken='';
+ sessionStorage.removeItem('mynusSessionToken:'+mynusServerBase);
+ for(const controller of mynusRequests760)controller.abort();mynusRequests760.clear();
+ window.dispatchEvent(new CustomEvent('mynus-session-change',{detail:{authenticated:false}}));
+}
 async function mynusFetch(input,options={}){
  const raw=typeof input==='string'?input:input instanceof URL?input.href:null;
  let path=raw;
  if(raw&&raw.startsWith(mynusServerBase+'/'))path=raw.slice(mynusServerBase.length);
  if(!path||!isMynusServerPath(path))return mynusNativeFetch(input,options);
- const headers=new Headers(options.headers||{});
- if(mynusSessionToken)headers.set('Authorization','Bearer '+mynusSessionToken);
- const reportFailure=path!=='/api/current-user'&&!path.startsWith('/debug/');
- window.dispatchEvent(new CustomEvent('mynus-server-request',{detail:{path}}));
- let response;
- try {response=await mynusNativeFetch(mynusServerBase+path,{...options,headers,credentials:mynusServerBase===location.origin?'same-origin':'omit'});}
- catch(error) {
-   if(reportFailure&&error.name!=='AbortError') {error.message=showMynusRequestFailure(path,'NETWORK');error.mynusReported=true;error.httpStatus='NETWORK';}
+ const authPath=/^\/api\/auth\/(?:login|register|register-code)(?:$|\?)/.test(path);
+ const logout=path==='/api/auth/logout';
+ const explicitAccount=path==='/api/current-user';
+ if(mynusLoggedOut760&&!authPath&&!logout&&!explicitAccount){
+   const error=new Error('Sign in or register to use server functions.');error.httpStatus=401;error.mynusReported=true;
+   if(!path.startsWith('/debug/'))showMynusRequestFailure(path,401,error.message);
    throw error;
  }
- if(!response.ok&&reportFailure) {
-   let data={};try {data=await response.clone().json();}catch(_){}
-   response.mynusFailureMessage=showMynusRequestFailure(path,response.status,data.details||data.error||data.message||response.statusText);
- }
-
- const token=response.headers.get('X-MyNus-Session');
- if(token!==null){const changed=!!token!==!!mynusSessionToken||['/api/auth/login','/api/auth/register','/api/auth/logout'].includes(path);mynusSessionToken=token;sessionStorage.setItem('mynusSessionToken:'+mynusServerBase,token);if(changed)window.dispatchEvent(new CustomEvent('mynus-session-change',{detail:{authenticated:!!token}}));}
- return response;
+ const headers=new Headers(options.headers||{});
+ const outgoingToken=mynusSessionToken;
+ if(outgoingToken&&!authPath)headers.set('Authorization','Bearer '+outgoingToken);
+ // Disconnect immediately; keep only the captured credential for the revoke request.
+ if(logout)detachServer760();
+ const epoch=mynusAuthEpoch760;
+ const controller=new AbortController();
+ if(!logout)mynusRequests760.add(controller);
+ const signal=options.signal?AbortSignal.any([options.signal,controller.signal]):controller.signal;
+ const reportFailure=path!=='/api/current-user'&&!path.startsWith('/debug/');
+ if(!logout)window.dispatchEvent(new CustomEvent('mynus-server-request',{detail:{path}}));
+ let response;
+ try{
+   response=await mynusNativeFetch(mynusServerBase+path,{...options,headers,signal,credentials:mynusServerBase===location.origin?'same-origin':'omit'});
+   if(!response.ok&&reportFailure){let data={};try{data=await response.clone().json();}catch(_){}response.mynusFailureMessage=showMynusRequestFailure(path,response.status,data.details||data.error||data.message||response.statusText);}
+   if(epoch!==mynusAuthEpoch760&&!logout)throw new DOMException('Server session changed.','AbortError');
+   if(response.status===401&&!authPath&&!logout&&!explicitAccount&&!mynusLoggedOut760)detachServer760();
+   // Only a successful, current login/register response may establish a session.
+   if(response.ok&&(authPath||explicitAccount)&&path!=='/api/auth/register-code'){
+     const token=response.headers.get('X-MyNus-Session');
+     if(token){mynusSessionToken=token;mynusLoggedOut760=false;sessionStorage.setItem('mynusSessionToken:'+mynusServerBase,token);window.dispatchEvent(new CustomEvent('mynus-session-change',{detail:{authenticated:true}}));}
+   }
+   if(response.status===401&&explicitAccount&&!mynusLoggedOut760)detachServer760();
+   return response;
+ }catch(error){
+   if(reportFailure&&error.name!=='AbortError'&&!error.mynusReported){error.message=showMynusRequestFailure(path,'NETWORK');error.mynusReported=true;error.httpStatus='NETWORK';}
+   throw error;
+ }finally{mynusRequests760.delete(controller);}
 }
+
+
 
 (function installLocalConsole(){
  const limit=3000,entries=[];let dirty=false,sequence=0;
@@ -6946,7 +6990,7 @@ async function waitForSeparation(jobId, run = activeSeparation) {
     } catch (error) {
       if (run.abortPromise) await run.abortPromise;
       if (run.aborted) throw separationAbortedError();
-      if (++failures >= 3) throw error;
+      if (mynusLoggedOut760 || error.name==="AbortError" || error.httpStatus===401 || ++failures >= 3) throw error;
       await sleep(500);
       continue;
     }
@@ -6982,7 +7026,8 @@ async function waitForSeparation(jobId, run = activeSeparation) {
 updateSplitButton();
 
 
-async function startSeparation(restoreRequest = null) {
+async function startSeparation(restoreRequest = null, resumeJob760 = null) {
+    if(mynusLoggedOut760){status.textContent="Sign in or register to start separation.";progressWrap.style.display="block";return;}
     if (activeSeparation) {
       await abortCurrentSeparation();
       return;
@@ -7077,7 +7122,7 @@ async function startSeparation(restoreRequest = null) {
         originalFileURL;
 
 
-      const response =
+      const response = resumeJob760 ? new Response(JSON.stringify({job_id:resumeJob760}),{headers:{"Content-Type":"application/json"}}) :
         await mynusFetch(
           "/separate",
           {
@@ -7125,6 +7170,7 @@ async function startSeparation(restoreRequest = null) {
 
       if (!jobId) throw new Error("Server did not return job_id");
       run.jobId = jobId;
+      sessionStorage.setItem("mynusPendingResult760",JSON.stringify({job_id:jobId,source:file.name}));
       if (run.abortRequested) await abortCurrentSeparation(run);
       if (run.aborted) throw separationAbortedError();
 
@@ -7160,8 +7206,10 @@ async function startSeparation(restoreRequest = null) {
         await waitForSeparation(
           jobId, run
         );
+      await waitForPaidResult760(data,run);
       status.textContent = "Downloading tracks for local project...";
       await retainSeparatedTracksLocally(data, run);
+      sessionStorage.removeItem("mynusPendingResult760");window.dispatchEvent(new Event("mynus-result-state"));
 
 
       singerSegments =
@@ -7561,14 +7609,17 @@ studio.style.display =
 
 
     catch (error) {
-      if (error.name === "SeparationAborted") {
+      if (mynusLoggedOut760 || error.name==="AbortError") {
+        studio.style.display=run.previousStudioDisplay;
+        status.textContent="Server operation paused. Local project remains available. Sign in to retrieve the server result.";status.className="progress-status info";
+      } else if (error.name === "SeparationAborted") {
         newProjectPromptDialog?.classList.remove("open");
         studio.style.display = run.previousStudioDisplay;
         status.textContent = "Separation aborted";
         status.className = "progress-status info";
       } else {
         // При потере polling стараемся остановить job, а не оставить его без UI.
-        if (run.jobId && !run.serverFinished && !run.aborted) {
+        if (run.jobId && !run.serverFinished && !run.aborted && !mynusLoggedOut760) {
           await abortCurrentSeparation(run);
         }
         if(!error.mynusReported)console.error(error);
@@ -7580,6 +7631,7 @@ studio.style.display =
       }
     } finally {
       if (activeSeparation === run) activeSeparation = null;
+      window.dispatchEvent(new Event("mynus-result-state"));
       updateSplitButton();
     }
     return run;
@@ -21727,7 +21779,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "7.4.3",
+    version: "7.6.0",
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
     current_tonic: currentTrackTonic(),
@@ -22633,7 +22685,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "7.4.3";
+const MYNUS_CLIENT_VERSION = "7.6.0";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -24370,14 +24422,14 @@ document.addEventListener("click", event => {
     setBusy(true); message.textContent = '';
     try {
       await api(registration ? '/api/auth/register' : '/api/auth/login', {email:email.value, code:code.value});
-      window.mynusLocalConsole.afterReload('account-in','Account signed in: '+email.value.trim());
-      window.location.reload();
+      window.mynusLocalConsole.event('account-in','Account signed in: '+email.value.trim());
+      accountChecked=false;await checkAccountOnDemand();setBusy(false);dialog.close();
     } catch (error) {message.textContent = error.message; setBusy(false);}
   };
   document.getElementById('mnLogout').onclick = async () => {
     if (busy) return;
     setBusy(true);
-    try {await api('/api/auth/logout', {}); window.mynusLocalConsole.afterReload('account-out','Account signed out.'); window.location.reload();}
+    try {await api('/api/auth/logout', {}); resetAccount760();window.mynusLocalConsole.event('account-out','Account signed out.');dialog.close();}
     catch (error) {message.textContent = error.message; setBusy(false);}
   };
   function showLocalAccountNotice() {
@@ -24386,6 +24438,19 @@ document.addEventListener("click", event => {
     form.querySelectorAll('button').forEach(button => button.disabled = button.id !== 'mnAuthClose');
     busy = false;
   }
+
+  function resetAccount760(){
+    authenticated=false;accountUser=null;accountRequest=null;accountChecked=false;
+    open.textContent='REG / LOG';open.title='Sign in or register';
+    document.getElementById('mnAuthTitle').textContent='MyNus — REG / LOG';
+    document.getElementById('mnAccount').hidden=true;
+    document.getElementById('mnLogout').hidden=true;
+    document.getElementById('mnLoginMethods').hidden=false;document.getElementById('mnLoginMethods').style.display='';
+    document.getElementById('mnAuthEmailLabel').hidden=false;email.required=true;submit.hidden=false;
+    mode(false);setBusy(false);
+  }
+  window.addEventListener('mynus-session-change',event=>{if(!event.detail.authenticated)resetAccount760();});
+
   let accountChecked = false;
   let accountCheckPromise = null;
   function checkAccountOnDemand() {
@@ -25374,9 +25439,9 @@ async function restoreMynusSnapshot(saved) {
 <button id="mnConsoleButton" type="button" aria-controls="mnConsolePanel" aria-expanded="true">Console</button>
 <aside id="mnConsolePanel" aria-label="Local console">
 <header><strong>Console</strong><button id="mnConsoleClose" type="button" aria-label="Hide console">×</button></header>
-<div class="mnConsoleActions"><button id="mnConsoleCopy" type="button">Copy</button><button id="mnConsoleSave" type="button">Save .log</button><button id="mnConsoleServer" type="button">Server logs</button><button id="mnServerAddress" type="button">Server address</button><button id="mnConsoleClear" type="button">Clear</button></div>
+<div class="mnConsoleActions"><button id="mnConsoleCopy" type="button">Copy</button><button id="mnConsoleSave" type="button">Save .log</button><button id="mnConsoleClear" type="button">Clear</button></div>
 <div id="mnConsoleText" tabindex="0" aria-label="Console log"></div>
-<div id="mnConsoleNotice" role="status">Local logs</div>
+<div id="mnConsoleNotice" role="status"></div>
 </aside>
 <script>
 (function(){
@@ -25397,7 +25462,7 @@ async function restoreMynusSnapshot(saved) {
  document.getElementById('mnConsoleClear').addEventListener('click',()=>{window.mynusLocalConsole.clear();notice.textContent='Cleared';});
 
  let serverStream=null,lastServerLogId='latest';
- const serverButton=document.getElementById('mnConsoleServer');
+ const serverButton={textContent:''};
  function disconnectServerLogs(){serverStream?.abort();serverStream=null;serverButton.textContent='Server logs';}
  async function connectServerLogs(toggle=false){
   if(serverStream){if(toggle)disconnectServerLogs();return;}
@@ -25413,7 +25478,7 @@ async function restoreMynusSnapshot(saved) {
   }catch(error){if(error.name!=='AbortError'){notice.textContent=error.message;console.warn(error.message);}}
   finally{if(serverStream===controller){serverStream=null;serverButton.textContent='Server logs';}}
  }
- serverButton.addEventListener('click',()=>connectServerLogs(true));
+
  window.addEventListener('mynus-server-request',event=>{
    if(!event.detail.path.startsWith('/debug/')&&mynusSessionToken)void connectServerLogs();
  });
@@ -25422,12 +25487,8 @@ async function restoreMynusSnapshot(saved) {
    if(event.detail.authenticated)void connectServerLogs();
    else notice.textContent='Local logs. Sign in to receive server logs.';
  });
- document.getElementById('mnServerAddress').addEventListener('click',()=>{
-  const value=prompt('Server address',mynusServerBase);if(value===null)return;
-  try{disconnectServerLogs();configureMynusServer(value.trim());lastServerLogId='latest';notice.textContent='Server address saved. Reload to refresh Account.';}catch(error){notice.textContent=error.message;}
- });
  window.addEventListener('pagehide',disconnectServerLogs);
- if(!mynusAppOrigin||mynusSessionToken)void connectServerLogs();
+ if(mynusSessionToken)void connectServerLogs();
  window.mynusLocalConsole.refresh();
 console.info(document.title + ' — интерфейс запущен.');
 window.mynusLocalConsole.flushEvent();
@@ -25437,11 +25498,11 @@ window.mynusLocalConsole.flushEvent();
 
 <div id="lyricsDatabaseDialog" hidden role="dialog" aria-modal="true" aria-labelledby="dbTitle">
   <section class="db-card">
-    <div class="db-head"><h2 id="dbTitle">Check Lyrics · LRCLIB</h2><button id="dbClose" type="button" aria-label="Close">×</button></div>
+    <div class="db-head"><h2 id="dbTitle">Check Lyrics</h2><button id="dbClose" type="button" aria-label="Close">×</button></div>
     <div class="db-body">
-    <form id="dbSearchForm"><label>Artist<input id="dbArtist" autocomplete="off"></label><label>Track title<input id="dbTrack" autocomplete="off" required></label><button id="dbSearch" type="submit">Search LRCLIB</button></form>
+    <form id="dbSearchForm"><label>Artist<input id="dbArtist" autocomplete="off"></label><label>Track title<input id="dbTrack" autocomplete="off" required></label><button id="dbSearch" type="submit">Search</button></form>
     <div id="dbStatus" role="status" aria-live="polite"></div>
-    <div id="dbResults" aria-label="LRCLIB results"></div>
+    <div id="dbResults" aria-label="Search results"></div>
     <div class="db-comparison"><label>Current active text<textarea id="dbCurrentText" readonly spellcheck="false"></textarea></label><label>Selected database text<textarea id="dbFoundText" readonly spellcheck="false"></textarea></label></div>
     <div id="dbTiming"></div>
     <div class="db-footer"><button id="dbApply" type="button" disabled>Replace active text · keep timing</button></div>
@@ -25538,7 +25599,8 @@ document.getElementById('lyricsDatabaseBtn').addEventListener('click',()=>{
     document.getElementById('dbArtist').value=parts.length>1?parts.shift():'';
     document.getElementById('dbTrack').value=parts.join(' — ')||name;
   }
-  dbSetStatus('Current track: '+dbTime(dbSnapshot.seconds)+'. Search is manual. Internet is required.');
+  document.getElementById('dbTitle').textContent='Check Lyrics — '+(document.getElementById('dbTrack').value.trim()||'Untitled')+' — '+dbTime(dbSnapshot.seconds);
+  dbSetStatus('Search is manual. Internet is required.');
   dbDialog.hidden=false;document.getElementById('dbTrack').focus();
 });
 document.getElementById('dbClose').onclick=dbClose;
@@ -25549,12 +25611,12 @@ document.getElementById('dbSearchForm').addEventListener('submit',async event=>{
   if(!track){dbSetStatus('Enter the track title.');return;}
   dbController?.abort();const controller=new AbortController();dbController=controller;dbReset();
   const timeout=setTimeout(()=>controller.abort(),20000);
-  document.getElementById('dbSearch').disabled=true;dbSetStatus('Searching LRCLIB…');
+  document.getElementById('dbSearch').disabled=true;dbSetStatus('Searching…');
   try {
     const query=new URLSearchParams({track_name:track});if(artist)query.set('artist_name',artist);
     const response=await mynusNativeFetch('https://lrclib.net/api/search?'+query,{signal:controller.signal,credentials:'omit'});
-    if(!response.ok){const error=new Error(response.status===503?'LRCLIB is temporarily unavailable (503). Try again later.':response.status===429?'LRCLIB rate limit (429). Try again later.':'LRCLIB error '+response.status);error.httpStatus=response.status;throw error;}
-    const records=await response.json();if(!Array.isArray(records))throw new Error('Invalid LRCLIB response.');
+    if(!response.ok){const error=new Error(response.status===503?'Lyrics database is temporarily unavailable (503). Try again later.':response.status===429?'Search rate limit (429). Try again later.':'Search error '+response.status);error.httpStatus=response.status;throw error;}
+    const records=await response.json();if(!Array.isArray(records))throw new Error('Invalid search response.');
     if(controller!==dbController)return;
     dbResults=records.map(record=>({record,...dbClassification(record,dbSnapshot.text,dbSnapshot.seconds)})).sort((a,b)=>a.group-b.group||Math.abs(a.delta??Infinity)-Math.abs(b.delta??Infinity)||b.score-a.score);
     for(const result of dbResults) {
@@ -25562,7 +25624,7 @@ document.getElementById('dbSearchForm').addEventListener('submit',async event=>{
       button.textContent=[result.record.artistName,result.record.trackName,result.record.albumName||'No album',dbTime(result.record.duration),result.delta===null?'Δ —':'Δ '+(result.delta>=0?'+':'')+result.delta.toFixed(2)+' s',result.label,'Text '+Math.round(result.score*100)+'%',result.record.syncedLyrics?'LRC':'Plain text'].join(' | ');
       button.onclick=()=>dbChoose(result,button);document.getElementById('dbResults').appendChild(button);
     }
-    dbSetStatus(records.length?records.length+' results returned by LRCLIB. Text similarity ≥65% is treated as a possible match; compare before replacing.':'No results. Check artist and title.');
+    dbSetStatus(records.length?records.length+' results found. Text similarity ≥65% is treated as a possible match; compare before replacing.':'No results. Check artist and title.');
   } catch(error) {if(controller===dbController&&!dbDialog.hidden)dbSetStatus(error.name==='AbortError'?'Search cancelled or timed out.':error.httpStatus?error.message:error.message+' Check Internet access.');}
   finally {clearTimeout(timeout);if(controller===dbController)document.getElementById('dbSearch').disabled=false;}
 });
@@ -25595,7 +25657,7 @@ document.getElementById('dbApply').onclick=()=>{
     lyricsData.words=karaokeLines.flatMap(line=>line.words);lyricsData.text=dbRecordText(dbSelected.record);
     lyricsEditorSelectedLine=0;lyricsEditorEditLineIndex=-1;activeKaraokeLine=-1;
     captureActiveLyrics();renderLyricsEditor();renderLyrics();
-    setLyricsEditorMessage('LRCLIB text applied. Existing timings retained; inserted words use estimated timing. Undo is available. Save Project to keep changes.');dbClose();
+    setLyricsEditorMessage('Selected text applied. Existing timings retained; inserted words use estimated timing. Undo is available. Save Project to keep changes.');dbClose();
   } catch(error) {dbSetStatus(error.message);}
 };
 for(const id of ['lyricsUndoBtn','lyricsRedoBtn'])document.getElementById(id).addEventListener('click',()=>{
@@ -25689,6 +25751,77 @@ for(const id of ['lyricsUndoBtn','lyricsRedoBtn'])document.getElementById(id).ad
   observer.observe(element,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['style','class']});
  }
 })();
+</script><script>(()=>{
+ const notice=document.getElementById('mnConsoleNotice');
+ const address='Server '+mynusServerBase;
+ const pinAddress=()=>{if(notice.textContent!==address)notice.textContent=address;};
+ new MutationObserver(pinAddress).observe(notice,{childList:true,characterData:true,subtree:true});pinAddress();
+ document.getElementById('dbTrack').addEventListener('input',()=>{
+  if(!dbDialog.hidden&&dbSnapshot)document.getElementById('dbTitle').textContent='Check Lyrics вЂ” '+(document.getElementById('dbTrack').value.trim()||'Untitled')+' вЂ” '+dbTime(dbSnapshot.seconds);
+ });
+ const resume=document.createElement('button');resume.type='button';resume.textContent='Retrieve result';resume.hidden=true;
+ document.getElementById('splitBtn').after(resume);
+ const state=()=>{resume.hidden=mynusLoggedOut760||!sessionStorage.getItem('mynusPendingResult760');};
+ window.addEventListener('mynus-session-change',state);window.addEventListener('mynus-result-state',state);state();
+ resume.onclick=()=>{
+  if(activeSeparation)return;
+  const pending=JSON.parse(sessionStorage.getItem('mynusPendingResult760')||'null');if(!pending)return;
+  const file=audioFile.files[0]||recentSelectedAudioFile;
+  if(!file||file.name!==pending.source){status.textContent='Select the original audio file "'+pending.source+'", then click Retrieve result.';progressWrap.style.display='block';return;}
+  void startSeparation(null,pending.job_id);
+ };
+ for(const [label,path,kind] of [['Sessions','/api/account/sessions','sessions'],['Results','/api/separations','results']]){
+  const button=document.createElement('button');button.type='button';button.textContent=label;
+  document.getElementById('mnAccountMenu').appendChild(button);
+  button.onclick=async()=>{
+   const box=document.createElement('section');box.className='result-access760';box.style.maxHeight='70vh';box.style.overflow='auto';
+   const title=document.createElement('strong');title.textContent=label;const close=document.createElement('button');close.type='button';close.textContent='Close';close.onclick=()=>box.remove();box.append(title,close);document.body.appendChild(box);
+   try{
+    const response=await mynusFetch(path);if(!response.ok)throw Error('Request failed ('+response.status+').');const data=await response.json();
+    for(const item of data[kind==='results'?'separations':kind]||[]){
+     const row=document.createElement('div');row.style.marginTop='10px';
+     if(kind==='sessions'){
+      const active=!item.revoked_at&&new Date(item.expires_at)>new Date();
+      row.textContent=item.created_at+' В· '+(item.session_id===data.current_session_id?'Current':active?'Active':'Closed');
+      if(active&&item.session_id!==data.current_session_id){const end=document.createElement('button');end.textContent='Sign out';end.onclick=async()=>{const r=await mynusFetch('/api/account/sessions/revoke',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:item.session_id})});if(r.ok){end.remove();row.append(' В· Closed');}};row.append(end);}
+     }else{
+      row.textContent='#'+item.separation_id+' В· '+(item.source_name||'Track')+' В· '+(item.files_deleted_at?'Files deleted':item.status);
+      if(item.status==='completed'&&!item.files_deleted_at){const get=document.createElement('button');get.textContent='Retrieve';get.onclick=()=>{sessionStorage.setItem('mynusPendingResult760',JSON.stringify({job_id:item.client_request_id.replace(/^job:/,''),source:item.source_name,separation_id:item.separation_id}));window.dispatchEvent(new Event('mynus-result-state'));document.getElementById('mnLoginDialog').close();box.remove();resume.click();};row.append(get);}
+     }
+     box.append(row);
+    }
+   }catch(error){const text=document.createElement('p');text.textContent=error.message;box.append(text);}
+  };
+ }
+})();
+async function waitForPaidResult760(data,run){
+ if(data.download_allowed===true)return;
+ sessionStorage.setItem('mynusPendingResult760',JSON.stringify({job_id:run.jobId,separation_id:data.separation_id,source:currentSourceAudioName}));
+ const box=document.createElement('section');box.className='result-access760';box.setAttribute('role','dialog');box.setAttribute('aria-label','Separation result access');
+ const title=document.createElement('strong');title.textContent='Separation #'+data.separation_id+' is ready';
+ const info=document.createElement('p');info.textContent='Download requires payment for this separation or an active plan. File cleanup eligibility: '+(data.delete_after||'24 hours after completion')+'. Cleanup runs daily at server midnight.';
+ const check=document.createElement('button');check.type='button';check.textContent='Check access';
+ const account=document.createElement('button');account.type='button';account.textContent='Account / Payments';
+ const close=document.createElement('button');close.type='button';close.textContent='Close';
+ const message=document.createElement('p');box.append(title,info,message,check,account,close);document.body.appendChild(box);
+ account.onclick=()=>document.getElementById('mnLoginButton').click();
+ await new Promise((resolve,reject)=>{
+  const done=(error)=>{window.removeEventListener('mynus-session-change',change);box.remove();if(error)reject(error);else resolve();};
+  const change=event=>{if(!event.detail.authenticated)done(new DOMException('Signed out. Result remains on the server.','AbortError'));};
+  window.addEventListener('mynus-session-change',change);
+  close.onclick=()=>done(new DOMException('Result remains on the server until cleanup.','AbortError'));
+  check.onclick=async()=>{
+   check.disabled=true;
+   try{
+    const response=await mynusFetch('/progress/'+encodeURIComponent(run.jobId));
+    if(!response.ok)throw new Error(response.mynusFailureMessage||'Result error ('+response.status+').');
+    const fresh=await response.json();
+    if(fresh.download_allowed){Object.assign(data,fresh);sessionStorage.removeItem('mynusPendingResult760');done();}
+    else message.textContent='No confirmed payment or active plan found. Payment processing must be connected on the server.';
+   }catch(error){message.textContent=error.message;}finally{check.disabled=false;}
+  };
+ });
+}
 </script></body>
 </html>
   
