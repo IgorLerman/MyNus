@@ -1,5 +1,5 @@
 # ========================================
-#  Fix tone&logs | 7.3.8 
+#  New Architecture | 7.4.0 
 # ========================================
 
 # ========================================
@@ -33,6 +33,51 @@ from werkzeug.utils import secure_filename
 # ========================================
 
 app = Flask(__name__)
+
+# The desktop application keeps its own local origin. Its session travels in a
+# signed header rather than relying on third-party cookies.
+from flask import session
+from itsdangerous import BadSignature
+DESKTOP_ORIGINS = {"https://mynus.local"}
+DESKTOP_ORIGINS.update(origin.strip() for origin in os.environ.get("MYNUS_DESKTOP_ORIGINS", "").split(",") if origin.strip())
+
+def _desktop_api_path(path):
+    return path.startswith(("/api/", "/progress/", "/abort/", "/results/", "/debug/")) or path == "/separate"
+
+@app.before_request
+def desktop_session_and_preflight():
+    origin = request.headers.get("Origin")
+    if origin in DESKTOP_ORIGINS and request.method == "OPTIONS" and _desktop_api_path(request.path):
+        return "", 204
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        serializer = app.session_interface.get_signing_serializer(app)
+        try:
+            payload = serializer.loads(auth[7:], max_age=43200)
+            if not isinstance(payload, dict):
+                raise ValueError("Invalid session")
+            session.clear()
+            session.update(payload)
+        except (BadSignature, ValueError):
+            session.clear()
+            return jsonify(error="Sign in or register to continue.", code=401), 401
+
+@app.after_request
+def desktop_response_headers(response):
+    origin = request.headers.get("Origin")
+    if origin in DESKTOP_ORIGINS and _desktop_api_path(request.path):
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Last-Event-ID, X-MyNus-Load-Trace, X-MyNus-Load-Track"
+        response.headers["Access-Control-Expose-Headers"] = "X-MyNus-Session"
+        response.vary.add("Origin")
+    if _desktop_api_path(request.path) and request.method != "OPTIONS":
+        serializer = app.session_interface.get_signing_serializer(app)
+        if serializer:
+            response.headers["X-MyNus-Session"] = serializer.dumps(dict(session)) if session.get("user_id") else ""
+    return response
+
+
 
 # Server stdout/stderr remain visible in the terminal and are mirrored to SSE.
 import collections
@@ -183,7 +228,7 @@ def debug_load_trace():
         print(f"  details         = {details}", flush=True)
     print("-" * 72, flush=True)
 
-    return jsonify({"ok": True, "version": "7.3.8", "trace_id": trace_id})
+    return jsonify({"ok": True, "version": "7.4.0", "trace_id": trace_id})
 
 
 # ========================================
@@ -2609,9 +2654,8 @@ from werkzeug.exceptions import HTTPException
 
 @app.errorhandler(HTTPException)
 def auth_http_error(error):
-    if request.path.startswith(("/api/auth/", "/api/account/")) or request.path == "/api/current-user":
-        return jsonify(error=error.description), error.code
-    return error
+    message = "Sign in or register to continue." if error.code == 401 else error.description
+    return jsonify(error=message, code=error.code), error.code
 
 
 @app.errorhandler(500)
@@ -2737,7 +2781,7 @@ def reject_legacy_project_storage():
         path == "/saved-projects" or path.startswith("/saved-projects/") or
         path.startswith("/opened-projects/") or path.startswith("/playlist/") or
         path == "/lyrics/save-current"):
-        return jsonify(error="Project save/load is local in MyNus 7.3.8"), 410
+        return jsonify(error="Project save/load is local in MyNus 7.4.0"), 410
 
 if __name__ == "__main__":
     with open(__file__, "r", encoding="utf-8-sig") as f:
