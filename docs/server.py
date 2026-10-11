@@ -1,5 +1,5 @@
 # ========================================
-#  BaseUpDate | 7.6.0 
+#  UserStatus | 7.7.0 
 # ========================================
 
 # ========================================
@@ -233,7 +233,7 @@ def debug_load_trace():
         print(f"  details         = {details}", flush=True)
     print("-" * 72, flush=True)
 
-    return jsonify({"ok": True, "version": "7.6.0", "trace_id": trace_id})
+    return jsonify({"ok": True, "version": "7.7.0", "trace_id": trace_id})
 
 
 # ========================================
@@ -256,7 +256,7 @@ def json_http_error(error):
 
 @app.route("/", methods=["GET"])
 def server_status():
-    return jsonify(service="MyNus Server", version="7.6.0", status="ready")
+    return jsonify(service="MyNus Server", version="7.7.0", status="ready")
 
 
 # ========================================
@@ -2589,10 +2589,12 @@ def account_payments():
     uid = current_user_id()
     with db_connection() as db:
         subscription = db.execute("SELECT plan_name,status,starts_at,ends_at FROM subscriptions WHERE user_id=? ORDER BY subscription_id DESC LIMIT 1", (uid,)).fetchone()
+        access_row = db.execute("SELECT status FROM users WHERE user_id=?", (uid,)).fetchone()
         payments = db.execute("SELECT amount_minor,currency,status,created_at,refunded_minor FROM payments WHERE user_id=? ORDER BY payment_id DESC LIMIT 20", (uid,)).fetchall()
     # This installation has no Paddle IDs, customer/subscription mapping or API integration.
     # Never substitute local subscription_id for a Paddle subscription ID.
-    return jsonify(subscription=dict(subscription) if subscription else None,
+    return jsonify(access_status=access_row["status"] if access_row else None,
+                   subscription=dict(subscription) if subscription else None,
                    payments=[dict(row) for row in payments],
                    change_plan_available=False, manage_subscription_available=False,
                    message="Payment management is not connected yet. No charge or subscription change will be made.")
@@ -2622,7 +2624,7 @@ def current_user():
     uid = current_user_id()
     with db_connection() as db:
         row = db.execute(
-            "SELECT user_id,name,email,phone,first_name,last_name,country,created_at,email_verified_at "
+            "SELECT user_id,name,email,phone,first_name,last_name,country,created_at,email_verified_at,status "
             "FROM users WHERE user_id=?",
             (uid,),
         ).fetchone()
@@ -2733,10 +2735,10 @@ def reject_legacy_project_storage():
         path == "/saved-projects" or path.startswith("/saved-projects/") or
         path.startswith("/opened-projects/") or path.startswith("/playlist/") or
         path == "/lyrics/save-current"):
-        return jsonify(error="Project save/load is local in MyNus 7.6.0"), 410
+        return jsonify(error="Project save/load is local in MyNus 7.7.0"), 410
 
 
-# 7.6.0 schema extension; SQLite backup before the first migration.
+# 7.7.0 schema extension; SQLite backup before the first migration.
 from datetime import datetime, timezone, timedelta
 def columns(db,table):
     return {row[1] for row in db.execute(f'PRAGMA table_info({table})')}
@@ -2814,13 +2816,13 @@ def ensure_schema760():
     try:
         needed=not columns(db,'sessions') or 'max_active_sessions' not in columns(db,'users') or 'separation_id' not in columns(db,'payments') or 'files_deleted_at' not in columns(db,'separations')
         if needed:
-            backup=DB_PATH.with_name('mynus-before-7.6.0-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')+'.db')
+            backup=DB_PATH.with_name('mynus-before-7.7.0-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')+'.db')
             with sqlite3.connect(backup) as target:db.backup(target)
             print('[DATABASE] Backup: '+str(backup),flush=True)
         migrate(db)
     finally:db.close()
 ensure_schema760()
-# MyNus 7.6.0: sessions, paid result access and scheduled media cleanup.
+# MyNus 7.7.0: sessions, paid result access and scheduled media cleanup.
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -2859,12 +2861,22 @@ def separation_row760(job_id,uid):
     if row is None:abort(404,description='Separation not found.')
     return dict(row)
 
+# Keep existing assignments. New accounts have no paid access by default.
+with db_connection() as database:
+    if 'status' not in {row[1] for row in database.execute('PRAGMA table_info(users)')}:
+        database.execute("ALTER TABLE users ADD COLUMN status TEXT DEFAULT NULL CHECK(status IN ('Subscription','OneTime'))")
+
 def result_access760(row):
     uid,sid=row['user_id'],row['separation_id']
     with db_connection() as db:
-        plan=db.execute("SELECT 1 FROM subscriptions WHERE user_id=? AND status='active' AND julianday(starts_at)<=julianday('now') AND julianday(ends_at)>julianday('now') LIMIT 1",(uid,)).fetchone()
-        paid=db.execute("SELECT 1 FROM payments WHERE user_id=? AND separation_id=? AND status='paid' AND refunded_minor=0 LIMIT 1",(uid,sid)).fetchone()
-    return bool(plan or paid),bool(plan)
+        user=db.execute("SELECT status FROM users WHERE user_id=?",(uid,)).fetchone()
+        access=user['status'] if user else None
+        if access == 'Subscription':
+            return True,True
+        if access == 'OneTime':
+            paid=db.execute("SELECT 1 FROM payments WHERE user_id=? AND separation_id=? AND status='paid' AND refunded_minor=0 LIMIT 1",(uid,sid)).fetchone()
+            return bool(paid),False
+    return False,False
 
 _media_lock760=threading.RLock()
 _media_readers760={}
