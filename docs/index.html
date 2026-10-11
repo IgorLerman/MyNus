@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 7.4.0 | New Architecture </title>
+  <title>MyNus 7.4.1 | Normalize text · LRCLIB\Old Interface Cleaning Fix </title>
 
 
  <style>
@@ -3686,6 +3686,54 @@ library.  If this is what you want to do, use the GNU Lesser General
 Public License instead of this License.
 
 -->
+
+<style>
+#initialSpellMenu {position:fixed;z-index:100000;background:#fff;color:#222;border:1px solid #ddd;box-shadow:0 3px 14px #0003;padding:28px 0 5px;min-width:140px;max-width:280px;max-height:70vh;overflow:auto;box-sizing:border-box;}
+#initialSpellMenu button {display:block;width:100%;margin:0;border:0;border-radius:0;background:transparent;color:#222;text-align:left;padding:7px 14px;font:14px Arial;cursor:pointer;min-height:0;box-shadow:none;}
+#initialSpellMenu button:hover,#initialSpellMenu button:focus-visible {background:#f1f1f1;}
+#initialSpellMenu .spell-close {position:absolute;right:3px;top:1px;width:26px;padding:3px;text-align:center;font-size:20px;}
+#initialSpellMenu .spell-ignore {margin-top:5px;border-top:1px solid #eee;}
+#lyricsDatabaseDialog[hidden] {display:none!important;}
+#lyricsDatabaseDialog {position:fixed;inset:0;z-index:100001;background:#0005;display:flex;align-items:center;justify-content:center;}
+#lyricsDatabaseDialog .db-card {background:#fff;color:#222;border-radius:8px;width:min(1100px,94vw);max-height:92vh;overflow:auto;padding:18px;box-sizing:border-box;font:14px Arial;}
+#lyricsDatabaseDialog .db-head {display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+#lyricsDatabaseDialog h2 {margin:0;font-size:18px;}
+#lyricsDatabaseDialog button {cursor:pointer;padding:7px 12px;}
+#lyricsDatabaseDialog button:disabled {cursor:default;opacity:.5;}
+#dbSearchForm {display:flex;gap:10px;flex-wrap:wrap;align-items:end;}
+#dbSearchForm label {display:flex;flex-direction:column;gap:4px;flex:1;min-width:180px;}
+#dbSearchForm input {font:14px Arial;padding:8px;}
+#dbStatus,#dbTiming {margin:10px 0;line-height:1.4;}
+#dbResults {max-height:24vh;overflow:auto;display:flex;flex-direction:column;gap:5px;}
+#lyricsDatabaseDialog .db-result {border:1px solid #ddd;border-left:6px solid;text-align:left;background:#fff;border-radius:0;color:#222;white-space:normal;}
+#lyricsDatabaseDialog .db-group-0 {border-left-color:#179b35;background:#edf9ef;}
+#lyricsDatabaseDialog .db-group-1 {border-left-color:#c79c00;background:#fff9dc;}
+#lyricsDatabaseDialog .db-group-2 {border-left-color:#d03131;background:#fff0f0;}
+#lyricsDatabaseDialog .db-group-3 {border-left-color:#888;background:#f0f0f0;}
+#lyricsDatabaseDialog .db-result.selected {outline:2px solid #226acc;outline-offset:-2px;}
+#lyricsDatabaseDialog .db-comparison {display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px;}
+#lyricsDatabaseDialog .db-comparison label {display:flex;flex-direction:column;gap:5px;}
+#lyricsDatabaseDialog textarea {resize:vertical;min-height:180px;width:100%;box-sizing:border-box;background:#fff;color:#222;border:1px solid #ccc;padding:10px;font:14px/1.5 Arial;}
+#lyricsDatabaseDialog .db-footer {display:flex;justify-content:flex-end;gap:10px;}
+@media(max-width:650px) {#lyricsDatabaseDialog .db-comparison {grid-template-columns:1fr;}}
+</style>
+
+<script>
+window.addEventListener('keydown',event=>{
+  const dialog=document.getElementById('lyricsDatabaseDialog');
+  if(dialog&&!dialog.hidden) {
+    if(event.key==='Escape'){event.preventDefault();document.getElementById('dbClose').click();}
+    if(event.key==='Tab') {
+      const targets=[...dialog.querySelectorAll('button:not(:disabled),input,textarea')];
+      const first=targets[0],last=targets.at(-1);
+      if(event.shiftKey&&(document.activeElement===first||!dialog.contains(document.activeElement))){event.preventDefault();last?.focus();}
+      else if(!event.shiftKey&&(document.activeElement===last||!dialog.contains(document.activeElement))){event.preventDefault();first?.focus();}
+    }
+    event.stopImmediatePropagation();
+  }
+},true);
+</script>
+<style>#progressWrap:has(.progress-status.error){min-height:44px;height:auto;}#progressWrap .progress-status.error{position:relative;padding:7px 50px 7px 0;min-height:30px;box-sizing:border-box;white-space:normal;overflow-wrap:anywhere;}</style>
 </head>
 
 
@@ -5463,6 +5511,7 @@ Public License instead of this License.
       <div class="lyrics-editor-actions">
         <span id="lyricsSaveNotice" style="min-width:150px; font-size:12px; text-align:right;"></span>
         <button type="button" id="cancelLyricsEditBtn">Cancel</button>
+        <button type="button" id="lyricsDatabaseBtn">Normalize text · LRCLIB</button>
         <button type="button" id="lyricsLoadBtn">Load</button>
         <button type="button" id="saveLyricsEditBtn">Save Project</button>
         <button type="button" id="lyricsSaveAsBtn">Save Lyrics</button>
@@ -5540,6 +5589,16 @@ function configureMynusServer(value){
  mynusServerBase=url.origin;localStorage.setItem('mynusServerBase',mynusServerBase);
  mynusSessionToken=sessionStorage.getItem('mynusSessionToken:'+mynusServerBase)||'';
 }
+function showMynusRequestFailure(path, code, details) {
+ const name=path==='/separate'?'Separation':path.startsWith('/api/auth/')||path.startsWith('/api/account/')?'Account':'Server';
+ const hint=code===401?'Sign in or register to continue.':code==='NETWORK'?'Cannot reach the server. Check Server address and connection.':details||'Request failed.';
+ const message=name+' error ('+code+'): '+hint;
+ const wrap=document.getElementById('progressWrap'),line=document.getElementById('status');
+ if(wrap)wrap.style.display='block';
+ if(line){line.textContent=message;line.className='progress-status error';}
+ console.error(message);
+ return message;
+}
 async function mynusFetch(input,options={}){
  const raw=typeof input==='string'?input:input instanceof URL?input.href:null;
  let path=raw;
@@ -5547,9 +5606,21 @@ async function mynusFetch(input,options={}){
  if(!path||!isMynusServerPath(path))return mynusNativeFetch(input,options);
  const headers=new Headers(options.headers||{});
  if(mynusSessionToken)headers.set('Authorization','Bearer '+mynusSessionToken);
- const response=await mynusNativeFetch(mynusServerBase+path,{...options,headers,credentials:mynusServerBase===location.origin?'same-origin':'omit'});
+ const reportFailure=path!=='/api/current-user'&&!path.startsWith('/debug/');
+ window.dispatchEvent(new CustomEvent('mynus-server-request',{detail:{path}}));
+ let response;
+ try {response=await mynusNativeFetch(mynusServerBase+path,{...options,headers,credentials:mynusServerBase===location.origin?'same-origin':'omit'});}
+ catch(error) {
+   if(reportFailure&&error.name!=='AbortError') {error.message=showMynusRequestFailure(path,'NETWORK');error.mynusReported=true;error.httpStatus='NETWORK';}
+   throw error;
+ }
+ if(!response.ok&&reportFailure) {
+   let data={};try {data=await response.clone().json();}catch(_){}
+   response.mynusFailureMessage=showMynusRequestFailure(path,response.status,data.details||data.error||data.message||response.statusText);
+ }
+
  const token=response.headers.get('X-MyNus-Session');
- if(token!==null){mynusSessionToken=token;sessionStorage.setItem('mynusSessionToken:'+mynusServerBase,token);}
+ if(token!==null){const changed=!!token!==!!mynusSessionToken||['/api/auth/login','/api/auth/register','/api/auth/logout'].includes(path);mynusSessionToken=token;sessionStorage.setItem('mynusSessionToken:'+mynusServerBase,token);if(changed)window.dispatchEvent(new CustomEvent('mynus-session-change',{detail:{authenticated:!!token}}));}
  return response;
 }
 
@@ -7247,7 +7318,7 @@ async function startSeparation(restoreRequest = null) {
 
         const code=response.status;
         const message=code===401?'Sign in or register to continue.':code===403?'You do not have permission to start separation.':(errorData.details||errorData.error||response.statusText||'Request failed.');
-        const failure=new Error('Separation error ('+code+'): '+message);failure.httpStatus=code;throw failure;
+        const failure=new Error('Separation error ('+code+'): '+message);failure.httpStatus=code;failure.mynusReported=!!response.mynusFailureMessage;throw failure;
 
       }
 
@@ -7707,7 +7778,8 @@ studio.style.display =
         if (run.jobId && !run.serverFinished && !run.aborted) {
           await abortCurrentSeparation(run);
         }
-        console.error(error);
+        if(!error.mynusReported)console.error(error);
+        progressWrap.style.display='block';
         status.textContent = (error.httpStatus ? error.message : "Separation error: " + error.message) +
           (run.abortError ? " — " + run.abortError + " Job: " + run.jobId : "");
         status.className = "progress-status error";
@@ -7722,7 +7794,8 @@ studio.style.display =
 }
 splitBtn.addEventListener("click", () => {
   startSeparation().catch(error => {
-    console.error(error);
+    if(!error.mynusReported)console.error(error);
+    progressWrap.style.display='block';
     activeSeparation = null; updateSplitButton();
     status.textContent = "Separation error: " + error.message;
   });
@@ -15520,20 +15593,31 @@ function showInitialWordSpellMenu(event, line, word) {
   event.preventDefault(); event.stopPropagation();
   document.getElementById('initialSpellMenu')?.remove();
   const menu = document.createElement('div');
-  menu.id = 'initialSpellMenu';
-  menu.style.cssText = 'position:fixed;z-index:100000;background:white;color:#222;border:1px solid #888;padding:8px;max-width:280px;box-shadow:0 4px 16px #0005';
-  menu.style.left = Math.max(0,Math.min(event.clientX,window.innerWidth-290))+'px';
-  menu.style.top = Math.max(0,Math.min(event.clientY,window.innerHeight-250))+'px';
+  menu.id = 'initialSpellMenu'; menu.setAttribute('role','menu');
   const issue = issues[0];
-  const title = document.createElement('div');title.textContent = issue.message;menu.appendChild(title);
-  for(const replacement of issue.replacements || []) {
-    const button=document.createElement('button');button.textContent=replacement;button.style.display='block';
-    button.onclick=()=>resolveWordIssue(line,word,issue,replacement);menu.appendChild(button);
+  const close = document.createElement('button');
+  close.type='button'; close.className='spell-close'; close.textContent='×'; close.setAttribute('aria-label','Close');
+  close.onclick=()=>menu.remove(); menu.appendChild(close);
+  for (const replacement of issue.replacements || []) {
+    const button=document.createElement('button'); button.type='button'; button.textContent=replacement;
+    button.setAttribute('role','menuitem'); button.onclick=()=>resolveWordIssue(line,word,issue,replacement); menu.appendChild(button);
   }
-  const ignore=document.createElement('button');ignore.textContent='Игнорировать';ignore.onclick=()=>resolveWordIssue(line,word,issue,null);menu.appendChild(ignore);
-  const close=document.createElement('button');close.textContent='Закрыть';close.onclick=()=>menu.remove();menu.appendChild(close);
+  const ignore=document.createElement('button'); ignore.type='button'; ignore.className='spell-ignore'; ignore.textContent='Ignore';
+  ignore.onclick=()=>{pushLyricsHistory();issues.forEach(item=>item.status='ignored');menu.remove();renderLyricsEditor();}; menu.appendChild(ignore);
   document.body.appendChild(menu);
+  const rect=menu.getBoundingClientRect();
+  menu.style.left=Math.max(4,Math.min(event.clientX,window.innerWidth-rect.width-4))+'px';
+  menu.style.top=Math.max(4,Math.min(event.clientY,window.innerHeight-rect.height-4))+'px';
 }
+document.addEventListener('pointerdown',event=>{
+  const menu=document.getElementById('initialSpellMenu');
+  if(menu&&!menu.contains(event.target))menu.remove();
+},true);
+document.addEventListener('keydown',event=>{
+  const menu=document.getElementById('initialSpellMenu');
+  if(menu&&event.key==='Escape'){menu.remove();event.preventDefault();event.stopImmediatePropagation();}
+},true);
+
 function preserveUnchangedWordIssues(previous, current) {
   // Sequence alignment preserves annotations when words are inserted or removed.
   const table=Array.from({length:previous.length+1},()=>new Uint16Array(current.length+1));
@@ -21849,7 +21933,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "7.4.0",
+    version: "7.4.1",
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
     current_tonic: currentTrackTonic(),
@@ -22751,7 +22835,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "7.4.0";
+const MYNUS_CLIENT_VERSION = "7.4.1";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -24292,7 +24376,7 @@ document.addEventListener("click", event => {
       throw new Error('Account request ('+response.status+'): the configured server did not return JSON. Check Server address.');
     }
     const result = await response.json();
-    if (!response.ok) {const error = new Error('Request error ('+response.status+'): '+(result.error || response.statusText)); error.result = result; throw error;}
+    if (!response.ok) {const error = new Error(response.mynusFailureMessage || ('Account error ('+response.status+'): '+(result.error || response.statusText))); error.result = result; throw error;}
     return result;
   }
   let accountUser = null, accountRequest = null;
@@ -25503,8 +25587,8 @@ async function restoreMynusSnapshot(saved) {
  let serverStream=null,lastServerLogId=0;
  const serverButton=document.getElementById('mnConsoleServer');
  function disconnectServerLogs(){serverStream?.abort();serverStream=null;serverButton.textContent='Server logs';}
- async function connectServerLogs(){
-  if(serverStream){disconnectServerLogs();return;}
+ async function connectServerLogs(toggle=false){
+  if(serverStream){if(toggle)disconnectServerLogs();return;}
   const controller=new AbortController();serverStream=controller;serverButton.textContent='Disconnect server';notice.textContent='Connecting…';
   try{
    const response=await mynusFetch('/debug/server-logs?after='+lastServerLogId,{signal:controller.signal});
@@ -25514,21 +25598,198 @@ async function restoreMynusSnapshot(saved) {
    while(!controller.signal.aborted){const chunk=await reader.read();if(chunk.done)break;pending+=decoder.decode(chunk.value,{stream:true});let index;
     while((index=pending.indexOf('\n\n'))>=0){const packet=pending.slice(0,index);pending=pending.slice(index+2);const data=packet.split('\n').filter(line=>line.startsWith('data:')).map(line=>line.slice(5).trimStart()).join('\n');if(!data)continue;const record=JSON.parse(data);if(record.id<=lastServerLogId)continue;lastServerLogId=record.id;window.mynusLocalConsole.appendServer(record);}
    }
-  }catch(error){if(error.name!=='AbortError')notice.textContent=error.message;}
+  }catch(error){if(error.name!=='AbortError'){notice.textContent=error.message;console.warn(error.message);}}
   finally{if(serverStream===controller){serverStream=null;serverButton.textContent='Server logs';}}
  }
- serverButton.addEventListener('click',connectServerLogs);
+ serverButton.addEventListener('click',()=>connectServerLogs(true));
+ window.addEventListener('mynus-server-request',event=>{
+   if(!event.detail.path.startsWith('/debug/')&&mynusSessionToken)void connectServerLogs();
+ });
+ window.addEventListener('mynus-session-change',event=>{
+   disconnectServerLogs();
+   if(event.detail.authenticated)void connectServerLogs();
+   else notice.textContent='Local logs. Sign in to receive server logs.';
+ });
  document.getElementById('mnServerAddress').addEventListener('click',()=>{
   const value=prompt('Server address',mynusServerBase);if(value===null)return;
   try{disconnectServerLogs();configureMynusServer(value.trim());lastServerLogId=0;notice.textContent='Server address saved. Reload to refresh Account.';}catch(error){notice.textContent=error.message;}
  });
  window.addEventListener('pagehide',disconnectServerLogs);
- if(!mynusAppOrigin)connectServerLogs();
+ if(!mynusAppOrigin||mynusSessionToken)void connectServerLogs();
  window.mynusLocalConsole.refresh();
 console.info(document.title + ' — интерфейс запущен.');
 })();
 </script>
 
+
+<div id="lyricsDatabaseDialog" hidden role="dialog" aria-modal="true" aria-labelledby="dbTitle">
+  <section class="db-card">
+    <div class="db-head"><h2 id="dbTitle">Lyrics database · LRCLIB</h2><button id="dbClose" type="button" aria-label="Close">×</button></div>
+    <form id="dbSearchForm"><label>Artist<input id="dbArtist" autocomplete="off"></label><label>Track title<input id="dbTrack" autocomplete="off" required></label><button id="dbSearch" type="submit">Search LRCLIB</button></form>
+    <div id="dbStatus" role="status" aria-live="polite"></div>
+    <div id="dbResults" aria-label="LRCLIB results"></div>
+    <div class="db-comparison"><label>Current active text<textarea id="dbCurrentText" readonly spellcheck="false"></textarea></label><label>Selected database text<textarea id="dbFoundText" readonly spellcheck="false"></textarea></label></div>
+    <div id="dbTiming"></div>
+    <div class="db-footer"><button id="dbApply" type="button" disabled>Replace active text · keep timing</button></div>
+  </section>
+</div>
+
+<script>
+// LRCLIB comparison runs only on explicit search, directly from the desktop app.
+function dbTokens(text) {
+  return String(text).normalize('NFKC').toLocaleLowerCase().replace(/ё/g, 'е').match(/[\p{L}\p{N}]+/gu) || [];
+}
+function dbAlign(oldTokens, newTokens) {
+  if (oldTokens.length * newTokens.length > 4000000) throw new Error('Text is too long to compare.');
+  const rows = Array.from({length: oldTokens.length + 1}, () => new Uint32Array(newTokens.length + 1));
+  for (let i=0;i<=oldTokens.length;i++) rows[i][0]=i;
+  for (let j=0;j<=newTokens.length;j++) rows[0][j]=j;
+  for (let i=1;i<=oldTokens.length;i++) for (let j=1;j<=newTokens.length;j++)
+    rows[i][j]=Math.min(rows[i-1][j]+1,rows[i][j-1]+1,rows[i-1][j-1]+(oldTokens[i-1]===newTokens[j-1]?0:1));
+  const mapping=Array(newTokens.length).fill(null);
+  let i=oldTokens.length,j=newTokens.length;
+  while(i||j) {
+    if(i&&j&&rows[i][j]===rows[i-1][j-1]+(oldTokens[i-1]===newTokens[j-1]?0:1)) {mapping[--j]=--i;}
+    else if(i&&rows[i][j]===rows[i-1][j]+1) i--;
+    else j--;
+  }
+  return {mapping, score: Math.max(0,1-rows[oldTokens.length][newTokens.length]/Math.max(oldTokens.length,newTokens.length,1))};
+}
+function dbLrc(text) {
+  const entries=[];
+  let offset=0;
+  const offsetMatch=String(text||'').match(/\[offset:([+-]?\d+)\]/i);
+  if(offsetMatch) offset=Number(offsetMatch[1])/1000;
+  for(const line of String(text||'').split(/\r?\n/)) {
+    const stamps=[...line.matchAll(/\[(\d+):(\d{2}(?:\.\d+)?)\]/g)];
+    const content=line.replace(/\[[^\]]*\]/g,'').trim();
+    for(const stamp of stamps) entries.push({start:Math.max(0,Number(stamp[1])*60+Number(stamp[2])+offset),text:content});
+  }
+  return entries.sort((a,b)=>a.start-b.start);
+}
+function dbRecordText(record) {
+  return String(record.plainLyrics || dbLrc(record.syncedLyrics).filter(x=>x.text).map(x=>x.text).join('\n')).trim();
+}
+function dbClassification(record, text, seconds) {
+  const tokens=dbTokens(text), candidate=dbTokens(dbRecordText(record));
+  const score=tokens.length&&candidate.length?dbAlign(tokens,candidate).score:0;
+  const delta=typeof record.duration==='number' && Number.isFinite(record.duration) && seconds>0 ? record.duration-seconds : null;
+  if(score<0.65||!candidate.length) return {group:3,label:'Text mismatch',score,delta};
+  if(delta===null) return {group:3,label:'Duration unavailable',score,delta};
+  return {group:Math.abs(delta)<=1?0:Math.abs(delta)<=5?1:2,label:Math.abs(delta)<=1?'Exact duration':Math.abs(delta)<=5?'Close duration':'Partial duration',score,delta};
+}
+function dbReplacement(lines, text, seconds) {
+  const original=lines.flatMap(line=>line.words||[]);
+  const chunks=String(text).split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  const raw=chunks.flatMap(x=>x.split(/\s+/));
+  const canonical=word=>dbTokens(word).join(' ');
+  const {mapping}=dbAlign(original.map(x=>canonical(x.word)),raw.map(canonical));
+  const words=raw.map((word,index)=>mapping[index]===null?{word}: {...original[mapping[index]],word});
+  words.forEach(word=>{delete word.spell_issues;delete word.source_word;delete word.ru_word;});
+  for(let i=0;i<words.length;) {
+    if(mapping[i]!==null) {i++;continue;}
+    const startIndex=i;
+    while(i<words.length&&mapping[i]===null)i++;
+    const start=startIndex?Number(words[startIndex-1].end):Number(original[0]?.start||0);
+    const end=Math.max(start,i<words.length?Number(words[i].start):Number(original.at(-1)?.end||seconds||start));
+    for(let j=startIndex;j<i;j++) {words[j].start=start+(end-start)*(j-startIndex)/(i-startIndex);words[j].end=start+(end-start)*(j-startIndex+1)/(i-startIndex);}
+  }
+  let index=0;
+  return chunks.map(text=>{const count=text.split(/\s+/).length;const part=words.slice(index,index+=count);return {start:part[0].start,end:part.at(-1).end,words:part};});
+}
+function dbTime(value) {
+  if(!Number.isFinite(value)) return '—';
+  return Math.floor(value/60)+':'+(value%60).toFixed(2).padStart(5,'0');
+}
+let dbController=null, dbResults=[], dbSelected=null, dbSnapshot=null, dbApplied=false;
+const dbDialog=document.getElementById('lyricsDatabaseDialog');
+const dbStatus=document.getElementById('dbStatus');
+function dbCurrentText() {return lyricsEditorDraft.map(line=>line._editedText??lineText(line)).join('\n');}
+function dbTrackDuration() {return Number(duration)||0;}
+function dbSetStatus(message) {dbStatus.textContent=message;}
+function dbClose() {dbController?.abort();dbController=null;dbDialog.hidden=true;document.getElementById('dbSearch').disabled=false;}
+function dbReset() {
+  dbResults=[];dbSelected=null;document.getElementById('dbResults').replaceChildren();
+  document.getElementById('dbFoundText').value='';document.getElementById('dbApply').disabled=true;
+  document.getElementById('dbTiming').textContent='';
+}
+document.getElementById('lyricsDatabaseBtn').addEventListener('click',()=>{
+  if(lyricsEditorEditLineIndex>=0) leaveLyricsEdit({restorePointer:false});
+  dbReset();dbSnapshot={text:dbCurrentText(),ru:lyricsTranscriptionMode,source:currentSourceAudioName,seconds:dbTrackDuration()};
+  document.getElementById('dbCurrentText').value=dbSnapshot.text;
+  if(!document.getElementById('dbTrack').value) {
+    const name=String(currentSourceAudioName||'').replace(/\.[^.]+$/,'');
+    const parts=name.split(/\s+[—–-]\s+/);
+    document.getElementById('dbArtist').value=parts.length>1?parts.shift():'';
+    document.getElementById('dbTrack').value=parts.join(' — ')||name;
+  }
+  dbSetStatus('Current track: '+dbTime(dbSnapshot.seconds)+'. Search is manual. Internet is required.');
+  dbDialog.hidden=false;document.getElementById('dbTrack').focus();
+});
+document.getElementById('dbClose').onclick=dbClose;
+dbDialog.addEventListener('click',event=>{if(event.target===dbDialog)dbClose();});
+document.getElementById('dbSearchForm').addEventListener('submit',async event=>{
+  event.preventDefault();
+  const track=document.getElementById('dbTrack').value.trim(),artist=document.getElementById('dbArtist').value.trim();
+  if(!track){dbSetStatus('Enter the track title.');return;}
+  dbController?.abort();const controller=new AbortController();dbController=controller;dbReset();
+  const timeout=setTimeout(()=>controller.abort(),20000);
+  document.getElementById('dbSearch').disabled=true;dbSetStatus('Searching LRCLIB…');
+  try {
+    const query=new URLSearchParams({track_name:track});if(artist)query.set('artist_name',artist);
+    const response=await mynusNativeFetch('https://lrclib.net/api/search?'+query,{signal:controller.signal,credentials:'omit'});
+    if(!response.ok)throw new Error(response.status===429?'LRCLIB rate limit (429). Try again later.':'LRCLIB error '+response.status);
+    const records=await response.json();if(!Array.isArray(records))throw new Error('Invalid LRCLIB response.');
+    if(controller!==dbController)return;
+    dbResults=records.map(record=>({record,...dbClassification(record,dbSnapshot.text,dbSnapshot.seconds)})).sort((a,b)=>a.group-b.group||Math.abs(a.delta??Infinity)-Math.abs(b.delta??Infinity)||b.score-a.score);
+    for(const result of dbResults) {
+      const button=document.createElement('button');button.type='button';button.className='db-result db-group-'+result.group;
+      button.textContent=[result.record.artistName,result.record.trackName,result.record.albumName||'No album',dbTime(result.record.duration),result.delta===null?'Δ —':'Δ '+(result.delta>=0?'+':'')+result.delta.toFixed(2)+' s',result.label,'Text '+Math.round(result.score*100)+'%',result.record.syncedLyrics?'LRC':'Plain text'].join(' | ');
+      button.onclick=()=>dbChoose(result,button);document.getElementById('dbResults').appendChild(button);
+    }
+    dbSetStatus(records.length?records.length+' results returned by LRCLIB. Text similarity ≥65% is treated as a possible match; compare before replacing.':'No results. Check artist and title.');
+  } catch(error) {if(controller===dbController&&!dbDialog.hidden)dbSetStatus(error.name==='AbortError'?'Search cancelled or timed out.':error.message+' Check Internet access.');}
+  finally {clearTimeout(timeout);if(controller===dbController)document.getElementById('dbSearch').disabled=false;}
+});
+function dbChoose(result,button) {
+  dbSelected=result;
+  document.querySelectorAll('.db-result').forEach(x=>x.classList.toggle('selected',x===button));
+  const text=dbRecordText(result.record);document.getElementById('dbFoundText').value=text;
+  document.getElementById('dbApply').disabled=!text;
+  const starts=new Map();
+  for(const line of lyricsEditorDraft) {
+    const key=dbTokens(line._editedText??lineText(line)).join(' ');
+    if(!starts.has(key))starts.set(key,[]);
+    starts.get(key).push(Number(line.start));
+  }
+  const deltas=[];
+  for(const line of dbLrc(result.record.syncedLyrics)) {
+    const queue=starts.get(dbTokens(line.text).join(' '));
+    if(line.text&&queue?.length)deltas.push(line.start-queue.shift());
+  }
+  document.getElementById('dbTiming').textContent=deltas.length?'Matching LRC lines: '+deltas.length+'; mean offset '+(deltas.reduce((a,b)=>a+b,0)/deltas.length).toFixed(2)+' s; maximum absolute difference '+Math.max(...deltas.map(Math.abs)).toFixed(2)+' s. Existing project timings will be kept.':'No comparable LRC lines. Existing project timings will be kept; timings for inserted words will be estimated between neighbours.';
+}
+document.getElementById('dbApply').onclick=()=>{
+  if(!dbSelected)return;
+  if(dbSnapshot.ru!==lyricsTranscriptionMode||dbSnapshot.source!==currentSourceAudioName||dbSnapshot.text!==dbCurrentText()||dbSnapshot.seconds!==dbTrackDuration()) {dbSetStatus('The project or active text changed. Close this window and reopen the comparison.');return;}
+  try {
+    lyricsEditorDraft.forEach(applyEditedTextToLine);
+    const replacement=dbReplacement(lyricsEditorDraft,dbRecordText(dbSelected.record),dbSnapshot.seconds);
+    if(!replacement.length)return;
+    pushLyricsHistory();dbApplied=true;lyricsEditorDraft=replacement;karaokeLines=lyricsCopy(replacement);
+    lyricsData.words=karaokeLines.flatMap(line=>line.words);lyricsData.text=dbRecordText(dbSelected.record);
+    lyricsEditorSelectedLine=0;lyricsEditorEditLineIndex=-1;activeKaraokeLine=-1;
+    captureActiveLyrics();renderLyricsEditor();renderLyrics();
+    setLyricsEditorMessage('LRCLIB text applied. Existing timings retained; inserted words use estimated timing. Undo is available. Save Project to keep changes.');dbClose();
+  } catch(error) {dbSetStatus(error.message);}
+};
+for(const id of ['lyricsUndoBtn','lyricsRedoBtn'])document.getElementById(id).addEventListener('click',()=>{
+  if(!dbApplied)return;
+  captureActiveLyrics();karaokeLines=lyricsCopy(lyricsEditorDraft);
+  lyricsData.words=karaokeLines.flatMap(line=>line.words);lyricsData.text=karaokeLines.map(lineText).join('\n');renderLyrics();
+});
+
+</script>
 </body>
 </html>
   
