@@ -1,5 +1,5 @@
 # ========================================
-#  New Architecture | 7.4.0 
+#  Old Interface Cleaning Fix | 7.4.1 
 # ========================================
 
 # ========================================
@@ -228,7 +228,7 @@ def debug_load_trace():
         print(f"  details         = {details}", flush=True)
     print("-" * 72, flush=True)
 
-    return jsonify({"ok": True, "version": "7.4.0", "trace_id": trace_id})
+    return jsonify({"ok": True, "version": "7.4.1", "trace_id": trace_id})
 
 
 # ========================================
@@ -239,14 +239,6 @@ def debug_load_trace():
 # INDEX
 # ========================================
 
-@app.route("/rubberband.js", methods=["GET"])
-def local_rubberband_library():
-    return send_from_directory(
-        BASE_DIR,
-        "rubberband.js",
-        mimetype="application/javascript",
-        max_age=0
-    )
 
 
 
@@ -256,61 +248,10 @@ def json_http_error(error):
     message = "Sign in or register to continue." if error.code == 401 else error.description
     return jsonify(error=message, code=error.code), error.code
 
-@app.route("/libs/rubberband.js", methods=["GET"])
-def pitch_library_in_subfolder():
-    return send_from_directory(os.path.join(BASE_DIR, "libs"), "rubberband.js", mimetype="application/javascript", max_age=0)
 
-@app.route("/")
-def index():
-    # Play List history belongs to the current index session only.
-    # Reloading index clears -N history but preserves current and queue.
-    state = _read_playlist_state()
-
-    if state.get("history"):
-        state["history"] = []
-        _write_playlist_state(state)
-
-        print(
-            "[PLAYLIST] INDEX RELOAD | history cleared",
-            flush=True
-        )
-
-    index_path = os.path.join(
-        BASE_DIR,
-        "index.html"
-    )
-
-    if not os.path.isfile(index_path):
-        index_path = os.path.join(BASE_DIR, "index_7.0.2.html")
-
-    with open(
-        index_path,
-        "r",
-        encoding="utf-8"
-    ) as index_file:
-        index_html = index_file.read()
-
-    # Передаём фактические источники дорожек при сохранении проекта.
-    source_script = r'''<script>
-    if (typeof projectStateJson === "function") {
-      const originalProjectStateJson = projectStateJson;
-      projectStateJson = function() {
-        const state = originalProjectStateJson();
-        state._sources =
-          typeof currentStemURLs === "undefined" ? [] :
-          Object.values(currentStemURLs).filter(v => typeof v === "string");
-        return state;
-      };
-    }
-    </script>'''
-
-    if "</body>" in index_html:
-        head, sep, tail = index_html.rpartition("</body>")
-        index_html = head + source_script + "\n" + sep + tail
-    else:
-        index_html += "\n" + source_script
-
-    return index_html
+@app.route("/", methods=["GET"])
+def server_status():
+    return jsonify(service="MyNus Server", version="7.4.1", status="ready")
 
 
 # ========================================
@@ -2328,8 +2269,8 @@ def auth_request_data():
         forwarded_scheme = request.headers.get("X-Forwarded-Proto", "")
         if forwarded_scheme in ("http", "https"):
             expected_origin = forwarded_scheme + "://" + request.host
-    if origin and origin.rstrip("/") != expected_origin:
-        abort(403, description="The page and server addresses do not match. Open MyNus through the server or its Cloudflare link.")
+    if origin and origin.rstrip("/") != expected_origin and origin not in DESKTOP_ORIGINS:
+        abort(403, description="This page is not allowed to access MyNus accounts. Use the MyNus application.")
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         abort(400)
@@ -2781,7 +2722,7 @@ def reject_legacy_project_storage():
         path == "/saved-projects" or path.startswith("/saved-projects/") or
         path.startswith("/opened-projects/") or path.startswith("/playlist/") or
         path == "/lyrics/save-current"):
-        return jsonify(error="Project save/load is local in MyNus 7.4.0"), 410
+        return jsonify(error="Project save/load is local in MyNus 7.4.1"), 410
 
 if __name__ == "__main__":
     with open(__file__, "r", encoding="utf-8-sig") as f:
