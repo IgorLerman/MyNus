@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MicroPhone | 7.7.0 </title>
+  <title>Indicators Fix | 7.7.1 </title>
 
 
  <style>
@@ -3444,7 +3444,7 @@ window.addEventListener('keydown',event=>{
    if(message.error)request.reject(new Error(message.error));else request.resolve(message.result);
  });
  function request(action,data={}) {
-   if(!available())return Promise.reject(new Error('Update MyNus.exe to 7.7.0 to use the project folder.'));
+   if(!available())return Promise.reject(new Error('Update MyNus.exe to 7.8.0 to use the project folder.'));
    const id=crypto.randomUUID();
    return new Promise((resolve,reject)=>{
      const timer=setTimeout(()=>{pending.delete(id);reject(new Error('Desktop file operation timed out.'));},1800000);
@@ -3480,7 +3480,7 @@ window.addEventListener('keydown',event=>{
 
 </script>
 <style>
-/* 7.7.0 compact track headings and desktop header */
+/* 7.8.0 compact track headings and desktop header */
 .track-controls{grid-template-columns:max-content minmax(0,1fr)!important;}
 .track-title{white-space:nowrap;display:flex;align-items:center;gap:4px;}
 .track-title .track-tonic{display:inline!important;margin:0!important;}
@@ -3530,6 +3530,18 @@ html.mynus-native-header #mnConsoleButton,html.mynus-native-header #mnLoginButto
 .lyrics-fullscreen-side-control.left{left:112px}.lyrics-fullscreen-side-control.right{right:112px}
 @media(max-width:700px){.fs-meter770.left{left:55px}.fs-meter770.right{right:55px}.fs-meter770.mic{left:12px}.lyrics-fullscreen-side-control.left{left:85px}.lyrics-fullscreen-side-control.right{right:85px}}
 #micMessage770{overflow-wrap:anywhere}.microphone-live770{color:#168bba}
+</style><style>/* Text updates never change the width or position of a meter. */
+.meter770{width:64px;min-width:64px;max-width:64px;flex:0 0 64px;box-sizing:border-box}
+.meter-number770{display:block;width:64px;text-align:center;white-space:nowrap;font-variant-numeric:tabular-nums}
+.meter770>span:first-child{width:64px;text-align:center}
+.meters770{justify-content:space-between;gap:0;padding:6px 0}
+.lyrics-fullscreen-side-control.left{left:clamp(12px,2.4cqw,24px)}
+.lyrics-fullscreen-side-control.right{right:clamp(12px,2.4cqw,24px)}
+.fs-meter770.mic{left:66px;right:auto}
+.fs-stereo780{position:absolute;right:66px;bottom:110px;display:flex;gap:0;z-index:5;color:#ddd;pointer-events:none}
+.fs-stereo780 .fs-meter770{position:static;left:auto;right:auto;bottom:auto}
+.fs-meter770 .meter-scale770{width:20px}
+@media(max-width:700px){.fs-meter770.mic{left:50px}.fs-stereo780{right:50px}.lyrics-fullscreen-side-control.left{left:12px}.lyrics-fullscreen-side-control.right{right:12px}}
 </style></head>
 
 
@@ -4391,7 +4403,7 @@ html.mynus-native-header #mnConsoleButton,html.mynus-native-header #mnLoginButto
         <div class="track-buttons"><button id="microphoneMuteBtn">Mute</button><button id="microphoneSoloBtn">Solo</button></div>
         <div class="volume-row"><input type="range" id="microphoneVolume" min="0" max="100" value="100"><span id="microphoneVolumeValue" class="volume-value">100%</span></div>
         <div class="track-save-row"><button data-export-track="microphone" data-export-scope="full">Export Track</button><button data-export-track="microphone" data-export-scope="selection">Export Selection</button></div>
-        <div class="track-buttons"><button id="micRecord770">Rec On</button><button id="micStopRecord770" disabled>Rec Off</button></div><div class="track-save-row crop-row"><button id="microphoneCropInBtn">Crop In</button><button id="microphoneCropOutBtn">Crop Out</button></div>
+        <div class="track-buttons"><button id="micClear780">Clear Rec</button><button id="micSave780" disabled>Save Rec</button></div><div class="track-buttons"><button id="micRecord770">Rec On</button><button id="micStopRecord770" disabled>Rec Off</button></div><div class="track-buttons"><button id="micUndo780" disabled>Undo Rec</button><button id="micRedo780" disabled>Redo Rec</button></div><div id="micState780" style="font-size:11px">No Records</div><div class="track-save-row crop-row"><button id="microphoneCropInBtn">Crop In</button><button id="microphoneCropOutBtn">Crop Out</button></div>
       </div>
       <div class="timeline-scroll" data-track="microphone"><div class="timeline-inner" id="microphoneTimeline"><canvas id="microphoneCanvas"></canvas><div id="microphoneCropMaskLeft" class="crop-mask"></div><div id="microphoneCropMaskRight" class="crop-mask"></div><div class="playhead" id="microphonePlayhead"></div></div></div>
     </div>
@@ -5023,7 +5035,7 @@ html.mynus-native-header #mnConsoleButton,html.mynus-native-header #mnLoginButto
 
       <section id="microphonePanel770"><strong>Microphone</strong>
 <select id="micDevice770" aria-label="Microphone device"><option value="default">Windows default input</option></select>
-<div class="mic-actions770"><button id="micEnable770">Enable</button><button id="micMonitor770" disabled>Monitor: Off</button></div>
+<div class="mic-actions770"><button id="micEnable770">Microphone: Off</button><button id="micMonitor770" disabled>Monitor: Off</button></div>
 <button id="micCreate770" class="fx-create-button">Create New Track</button>
 <div class="meters770"><div data-meter770="L"></div><div data-meter770="Mic"></div><div data-meter770="R"></div></div>
 <small id="micMessage770">Microphone is off</small></section></aside>
@@ -6334,6 +6346,7 @@ const stemIds = [
 
 
 const instrumentalStemIds = [
+  "microphone",
   "pitchCorrection",
   "harmonizer",
   "drums",
@@ -6506,6 +6519,7 @@ let masterDuration = 0;
 
 let masterSegments = [];
 let masterUndoStack = [];
+const rec780={undo:[],redo:[],micSegments:[],micSaved:null,target:"master",busy:false,epoch:0};
 let masterRedoStack = [];
 
 // 5.4.15 | Единый диапазон Selection / IN / OUT.
@@ -7848,6 +7862,7 @@ function clearMasterCanvas() {
 
 // Работа с Master/Mix и итоговым аудиосостоянием.
 function resetMaster() {
+  resetRec780();
 
   masterLivePeaks =
     [];
@@ -10876,7 +10891,7 @@ function ensureMixAudioGraph() {
   masterRecordProcessor.onaudioprocess =
     event => {
 
-      if (!masterRecording) {
+      if (!masterRecording || rec780.target!=="master") {
         return;
       }
 
@@ -11707,7 +11722,7 @@ stopMasterBtn.addEventListener(
 
 
 // Работа с Master/Mix и итоговым аудиосостоянием.
-async function startMasterRecording() {
+async function startMasterRecordingLegacy780() {
   if (masterRecording || masterRecordArmed) return;
 
   activateMixMode();
@@ -11725,7 +11740,7 @@ async function startMasterRecording() {
       masterRecordArmed = true;
       recordMasterBtn.disabled = true;
       stopMasterBtn.disabled = false;
-      setMasterState(
+      setRecordingState780(
   "Rec armed — pre-roll"
 );
       if (!isPlaying) playCurrentMode();
@@ -11745,468 +11760,162 @@ async function startMasterRecording() {
 }
 
 function beginMasterCaptureAt(startTime) {
-  const lockedStart = Number(startTime);
-  if (!Number.isFinite(lockedStart)) return;
-  masterRecordArmed = false;
-  masterRecordTimelineStart = lockedStart;
-  masterRecordTimelineEnd = lockedStart;
-  waveformData.master = null;
-  masterBlob = null;
-  masterLivePeaks = [];
-  masterPcmChunks = [];
-  masterPcmSampleRate = mixAudioContext.sampleRate;
-  masterPcmChannels = 2;
-  masterPcmFrameCount = 0;
-  clearMasterCanvas();
-  masterRecording = true;
-  masterRecordStartTime = performance.now();
-  recordMasterBtn.disabled = true;
-  stopMasterBtn.disabled = false;
-  saveAsMasterBtn.disabled = true;
-  setMasterState(
-  "Recording..."
-);
-  startMasterWaveformCapture();
+ if(!Number.isFinite(Number(startTime)))return;
+ masterRecordArmed=false;masterRecordTimelineStart=Number(startTime);masterRecordTimelineEnd=Number(startTime);
+ rec780.before=snapshotRec780(rec780.target);
+ if(rec780.target==='master'){waveformData.master=null;masterBlob=null;clearMasterCanvas();}
+ masterLivePeaks=[];masterPcmChunks=[];masterPcmSampleRate=mixAudioContext.sampleRate;
+ masterPcmChannels=2;masterPcmFrameCount=0;masterRecording=true;masterRecordStartTime=performance.now();
+ setRecordingState780('Recording...');updateRecControls780();startMasterWaveformCapture();
 }
 
 // Управление транспортом и воспроизведением.
-function stopMasterRecording() {
-
-  if (masterRecordArmed && !masterRecording) {
-    masterRecordArmed = false;
-    masterRecordSelectionMode = false;
-    recordMasterBtn.disabled = false;
-    stopMasterBtn.disabled = true;
-        return;
-  }
-
-  if (!masterRecording) return;
-
-
-  // Сначала прекращаем приём PCM.
-  masterRecording =
-    false;
-
-  masterRecordArmed = false;
-  masterRecordSelectionMode = false;
-
-  masterRecordTimelineEnd =
-    getCurrentTime();
-
-
-  stopMasterWaveformCapture();
-
-
-  recordMasterBtn.disabled =
-    false;
-
-
-  stopMasterBtn.disabled =
-    true;
-
-
-  
-  finishMasterRecording();
-
+function stopMasterRecording(){
+ if(masterRecordArmed&&!masterRecording){masterRecordArmed=false;masterRecordSelectionMode=false;disconnectMicCapture780();microphoneAudio.muted=false;setRecordingState780('No Records');updateRecControls780();return;}
+ if(!masterRecording)return;
+ masterRecording=false;masterRecordArmed=false;masterRecordSelectionMode=false;masterRecordTimelineEnd=getCurrentTime();
+ stopMasterWaveformCapture();finishMasterRecording();
 }
 
 
 // Работа с Master/Mix и итоговым аудиосостоянием.
-async function finishMasterRecording() {
-
-  try {
-
-    if (
-      masterPcmFrameCount <= 0
-      ||
-      masterPcmChunks.length === 0
-    ) {
-
-      throw new Error(
-        "No PCM frames recorded"
-      );
-
-    }
-
-
-    const timelineDuration =
-      Math.max(
-        0,
-        masterRecordTimelineEnd
-        - masterRecordTimelineStart
-      );
-
-
-    const expectedFrames =
-      Math.max(
-        1,
-        Math.round(
-          timelineDuration
-          * masterPcmSampleRate // частота дискретизации PCM Master
-        )
-      );
-
-
-    const availableFrames =
-      masterPcmFrameCount;
-
-
-    const frameCount =
-      Math.min(
-        availableFrames,
-        expectedFrames
-      );
-
-
-    const decodeContext =
-      new AudioContext({
-        sampleRate:
-          masterPcmSampleRate
-      });
-
-
-    const segmentBuffer =
-      decodeContext.createBuffer(
-        masterPcmChannels,
-        frameCount,
-        masterPcmSampleRate
-      );
-
-
-    let writeOffset =
-      0;
-
-
-    for (
-      const chunk
-      of masterPcmChunks
-    ) {
-
-      if (
-        writeOffset >= frameCount
-      ) {
-
-        break;
-
-      }
-
-
-      const chunkFrames =
-        Math.min(
-          chunk[0].length,
-          frameCount
-          - writeOffset
-        );
-
-
-      for (
-        let channel = 0;
-        channel < masterPcmChannels;
-        channel++
-      ) {
-
-        segmentBuffer
-          .getChannelData(
-            channel
-          )
-          .set(
-            chunk[
-              Math.min(
-                channel,
-                chunk.length - 1
-              )
-            ].subarray(
-              0,
-              chunkFrames
-            ),
-            writeOffset
-          );
-
-      }
-
-
-      writeOffset +=
-        chunkFrames;
-
-    }
-
-
-    await decodeContext.close();
-
-
-    masterUndoStack.push(
-      cloneMasterSegments(
-        masterSegments
-      )
-    );
-
-
-    masterRedoStack =
-      [];
-
-
-    const replaceStart =
-      masterRecordTimelineStart;
-
-
-    const replaceEnd =
-      masterRecordTimelineStart
-      + segmentBuffer.duration;
-
-
-    const replacementSegments =
-      [];
-
-
-    for (
-      const oldSegment
-      of masterSegments
-    ) {
-
-      const oldStart =
-        oldSegment.start;
-
-
-      const oldEnd =
-        oldSegment.start
-        + oldSegment.buffer.duration;
-
-
-      if (
-        oldEnd <= replaceStart
-        ||
-        oldStart >= replaceEnd
-      ) {
-
-        replacementSegments.push(
-          oldSegment
-        );
-
-        continue;
-
-      }
-
-
-      const sampleRate =
-        oldSegment.buffer.sampleRate;
-
-
-      const channels =
-        oldSegment.buffer.numberOfChannels;
-
-
-      if (
-        oldStart < replaceStart
-      ) {
-
-        const leftFrames =
-          Math.max(
-            0,
-            Math.floor(
-              (replaceStart - oldStart)
-              * sampleRate // частота дискретизации
-            )
-          );
-
-
-        if (
-          leftFrames > 0
-        ) {
-
-          const leftBuffer =
-            new AudioContext({
-              sampleRate
-            }).createBuffer(
-              channels,
-              leftFrames,
-              sampleRate
-            );
-
-
-          for (
-            let channel = 0;
-            channel < channels;
-            channel++
-          ) {
-
-            leftBuffer
-              .getChannelData(
-                channel
-              )
-              .set(
-                oldSegment.buffer
-                  .getChannelData(
-                    channel
-                  )
-                  .subarray(
-                    0,
-                    leftFrames
-                  )
-              );
-
-          }
-
-
-          replacementSegments.push({
-            start:
-              oldStart,
-            buffer:
-              leftBuffer
-          });
-
-        }
-
-      }
-
-
-      if (
-        oldEnd > replaceEnd
-      ) {
-
-        const rightStartFrame =
-          Math.max(
-            0,
-            Math.ceil(
-              (replaceEnd - oldStart)
-              * sampleRate // частота дискретизации
-            )
-          );
-
-
-        const rightFrames =
-          Math.max(
-            0,
-            oldSegment.buffer.length
-            - rightStartFrame
-          );
-
-
-        if (
-          rightFrames > 0
-        ) {
-
-          const rightBuffer =
-            new AudioContext({
-              sampleRate
-            }).createBuffer(
-              channels,
-              rightFrames,
-              sampleRate
-            );
-
-
-          for (
-            let channel = 0;
-            channel < channels;
-            channel++
-          ) {
-
-            rightBuffer
-              .getChannelData(
-                channel
-              )
-              .set(
-                oldSegment.buffer
-                  .getChannelData(
-                    channel
-                  )
-                  .subarray(
-                    rightStartFrame
-                  )
-              );
-
-          }
-
-
-          replacementSegments.push({
-            start:
-              replaceEnd,
-            buffer:
-              rightBuffer
-          });
-
-        }
-
-      }
-
-    }
-
-
-    masterSegments =
-      replacementSegments;
-
-
-    masterSegments.push({
-      start:
-        replaceStart,
-      buffer:
-        segmentBuffer
-    });
-
-
-    masterSegments.sort(
-      (
-        a,
-        b
-      ) =>
-        a.start - b.start
-    );
-
-
-    await rebuildMasterTrack();
-
-
-    // 5.5.0 | Новый masterBlob уже создан — теперь Save Rec должен стать активным.
-    updateMasterHistoryButtons();
-
-
-    drawMasterCompositeWaveform();
-
-  }
-
-
-  catch (error) {
-
-    console.error(
-      "Master PCM recording error:",
-      error
-    );
-
-
-    setMasterState(
-  "Master recording error"
-);
-
-
-    setMasterState(
-  "Master recording error"
-);
-    status.className = "progress-status error";
-
-
-    return;
-
-  }
-
-
-  setMasterState(
-  "Recorded — not saved"
-);
-
-
-  saveAsMasterBtn.disabled =
-    false;
-
-
-  saveMasterSelectionBtn.disabled =
-    !hasSelection();
-
-
-  status.textContent =
-    "Master recording complete";
-  status.className = "progress-status success";
-
+// One transport/capture controller and one REC undo/redo history for both tracks.
+let micCapture780=null,micCaptureInput780=null,micSilent780=null;
+function micState780(text){const el=document.getElementById('micState780');if(el){el.textContent=text;el.style.color=text==='Recording...'?'#800020':text==='Saved successfully'?'#00a050':'#2196f3';}}
+function setRecordingState780(text){if(rec780.target==='microphone')micState780(text);else setMasterState(text);}
+function updateRecControls780(){
+ const locked=masterRecording||masterRecordArmed||rec780.busy;
+ undoMasterBtn.disabled=redoMasterBtn.disabled=locked;
+ if(!locked){undoMasterBtn.disabled=!rec780.undo.length;redoMasterBtn.disabled=!rec780.redo.length;}
+ const $=id=>document.getElementById(id);
+ if($('micUndo780'))$('micUndo780').disabled=undoMasterBtn.disabled;
+ if($('micRedo780'))$('micRedo780').disabled=redoMasterBtn.disabled;
+ recordMasterBtn.disabled=locked;stopMasterBtn.disabled=!(masterRecording||masterRecordArmed)&&!rec780.busy;
+ if($('micRecord770'))$('micRecord770').disabled=locked;
+ if($('micStopRecord770'))$('micStopRecord770').disabled=!(masterRecording||masterRecordArmed)||rec780.target!=='microphone';
+ if(rec780.target==='microphone')stopMasterBtn.disabled=true;
+ if(clearMasterRecBtn)clearMasterRecBtn.disabled=locked||(!masterBlob&&!masterSegments.length);
+ if(saveMasterRecBtn)saveMasterRecBtn.disabled=locked||!masterBlob||savedMasterBlob===masterBlob;
+ if($('micClear780'))$('micClear780').disabled=locked||!rec780.micSegments.length;
+ if($('micSave780'))$('micSave780').disabled=locked||!waveformData.microphone||rec780.micSaved===waveformData.microphone;
 }
+function resetRec780(){
+ rec780.epoch++;masterRecording=false;masterRecordArmed=false;stopMasterWaveformCapture();
+ disconnectMicCapture780();rec780.undo=[];rec780.redo=[];rec780.micSegments=[];rec780.micSaved=null;rec780.target='master';rec780.busy=false;
+ microphoneAudio.muted=false;micState780('No Records');
+}
+function disconnectMicCapture780(){
+ if(micCapture780){micCapture780.onaudioprocess=null;try{micCaptureInput780?.disconnect(micCapture780);micCapture780.disconnect();micSilent780?.disconnect();}catch(_){}}
+ micCapture780=micCaptureInput780=micSilent780=null;
+}
+async function startMasterRecording(target='master'){
+ target=target==='microphone'?'microphone':'master';
+ if(masterRecording||masterRecordArmed||rec780.busy)return;
+ if(!(duration>0)){status.textContent='Open a track or project before recording.';return;}
+ if(target==='microphone'){
+  const mic=window.mynusMicrophone770;if(!mic)return;
+  if(!mic.enabled())await mic.enable();if(!mic.enabled())return;
+  if(masterRecording||masterRecordArmed||rec780.busy)return;
+  if(!rec780.micSegments.length&&waveformData.microphone)rec780.micSegments=[{start:0,buffer:waveformData.microphone}];
+ }
+ rec780.target=target;
+ try{
+  if(target==='microphone'){
+   ensureMixAudioGraph();microphoneAudio.muted=true;
+   micCaptureInput780=window.mynusMicrophone770.input();
+   micCapture780=mixAudioContext.createScriptProcessor(2048,2,2);micSilent780=mixAudioContext.createGain();micSilent780.gain.value=0;
+   micCaptureInput780.connect(micCapture780);micCapture780.connect(micSilent780);micSilent780.connect(mixAudioContext.destination);
+   micCapture780.onaudioprocess=e=>{
+    if(!masterRecording||rec780.target!=='microphone')return;
+    const b=e.inputBuffer,chunk=[];let peak=0;
+    for(let c=0;c<2;c++){const samples=new Float32Array(b.getChannelData(Math.min(c,b.numberOfChannels-1)));chunk.push(samples);for(const value of samples)peak=Math.max(peak,Math.abs(value));}
+    masterPcmChunks.push(chunk);masterPcmFrameCount+=b.length;masterLivePeaks.push(Math.min(1,peak));
+   };
+  }
+  await startMasterRecordingLegacy780();updateRecControls780();
+ }catch(e){masterRecording=false;masterRecordArmed=false;disconnectMicCapture780();microphoneAudio.muted=false;setRecordingState780('Recording error');console.error(e);updateRecControls780();}
+}
+function recordingSegments780(track){return track==='master'?masterSegments:rec780.micSegments;}
+function snapshotRec780(track){return {track,segments:cloneMasterSegments(recordingSegments780(track)),saved:track==='master'?savedMasterBlob:rec780.micSaved,savedCurrent:track==='master'?!!masterBlob&&masterBlob===savedMasterBlob:!!waveformData.microphone&&waveformData.microphone===rec780.micSaved};}
+function pushRec780(track){rec780.undo.push(snapshotRec780(track));rec780.redo=[];}
+function sliceRecBuffer780(buffer,from,to){
+ const start=Math.max(0,Math.round(from*buffer.sampleRate)),end=Math.min(buffer.length,Math.round(to*buffer.sampleRate));
+ if(end<=start)return null;
+ const result=mixAudioContext.createBuffer(buffer.numberOfChannels,end-start,buffer.sampleRate);
+ for(let ch=0;ch<buffer.numberOfChannels;ch++)result.getChannelData(ch).set(buffer.getChannelData(ch).subarray(start,end));
+ return result;
+}
+function replaceRecSegments780(segments,start,buffer){
+ const end=start+buffer.duration,remaining=[];
+ for(const segment of segments){
+  const a=segment.start,b=a+segment.buffer.duration;
+  if(b<=start||a>=end){remaining.push(segment);continue;}
+  if(a<start){const left=sliceRecBuffer780(segment.buffer,0,start-a);if(left)remaining.push({start:a,buffer:left});}
+  if(b>end){const right=sliceRecBuffer780(segment.buffer,end-a,segment.buffer.duration);if(right)remaining.push({start:end,buffer:right});}
+ }
+ remaining.push({start,buffer});return remaining.sort((a,b)=>a.start-b.start);
+}
+async function rebuildMic780(){
+ if(!rec780.micSegments.length){
+  microphoneAudio.pause();microphoneAudio.removeAttribute('src');microphoneAudio.load();
+  if(generatedTrackURLs.microphone)URL.revokeObjectURL(generatedTrackURLs.microphone);
+  generatedTrackURLs.microphone=null;delete currentStemURLs.microphone;waveformData.microphone=null;drawAllWaveforms();micState780('No Records');return;
+ }
+ ensureMixAudioGraph();const rate=mixAudioContext.sampleRate;
+ const channels=Math.max(...rec780.micSegments.map(s=>s.buffer.numberOfChannels));
+ const full=mixAudioContext.createBuffer(channels,Math.max(1,Math.ceil(duration*rate)),rate);
+ for(const segment of rec780.micSegments){
+  const start=Math.round(segment.start*rate),frames=Math.min(full.length-start,Math.round(segment.buffer.duration*rate));
+  for(let ch=0;ch<channels;ch++){
+   const src=segment.buffer.getChannelData(Math.min(ch,segment.buffer.numberOfChannels-1)),dst=full.getChannelData(ch);
+   for(let i=0;i<frames;i++){const pos=i*segment.buffer.sampleRate/rate,a=Math.floor(pos),f=pos-a;dst[start+i]=(src[a]||0)*(1-f)+(src[Math.min(a+1,src.length-1)]||0)*f;}
+  }
+ }
+ await installGeneratedTrack('microphone',full);
+}
+async function finishMasterRecording(){
+ const target=rec780.target,epoch=rec780.epoch,start=masterRecordTimelineStart;
+ rec780.busy=true;disconnectMicCapture780();updateRecControls780();
+ try{
+  if(masterPcmFrameCount<=0||!masterPcmChunks.length)throw Error('No PCM frames recorded');
+  const frames=Math.min(masterPcmFrameCount,Math.max(1,Math.round((masterRecordTimelineEnd-start)*masterPcmSampleRate)));
+  const segment=mixAudioContext.createBuffer(2,frames,masterPcmSampleRate);let offset=0;
+  for(const chunk of masterPcmChunks){const count=Math.min(chunk[0].length,frames-offset);if(count<=0)break;for(let c=0;c<2;c++)segment.getChannelData(c).set(chunk[Math.min(c,chunk.length-1)].subarray(0,count),offset);offset+=count;}
+  if(epoch!==rec780.epoch)return;
+  rec780.undo.push(rec780.before||snapshotRec780(target));rec780.redo=[];const next=replaceRecSegments780(recordingSegments780(target),start,segment);
+  if(target==='master'){masterSegments=next;await rebuildMasterTrack();drawMasterCompositeWaveform();saveAsMasterBtn.disabled=false;saveMasterSelectionBtn.disabled=!hasSelection();}
+  else{rec780.micSegments=next;await rebuildMic780();window.mynusMicrophone770.monitorOff();}
+  if(epoch!==rec780.epoch)return;
+  setRecordingState780('Recorded — not saved');status.textContent=(target==='master'?'Master':'Microphone')+' recording complete';status.className='progress-status success';
+ }catch(e){setRecordingState780('Recording error');status.textContent='Recording error: '+e.message;status.className='progress-status error';console.error(e);}
+ finally{if(epoch===rec780.epoch){microphoneAudio.muted=false;rec780.busy=false;updateRecControls780();}}
+}
+async function restoreRec780(entry){
+ if(entry.track==='master'){masterSegments=cloneMasterSegments(entry.segments);savedMasterBlob=entry.saved;await restoreMasterFromSegments();if(entry.savedCurrent)savedMasterBlob=masterBlob;}
+ else{rec780.micSegments=cloneMasterSegments(entry.segments);rec780.micSaved=entry.saved;await rebuildMic780();if(entry.savedCurrent)rec780.micSaved=waveformData.microphone;if(rec780.micSegments.length)micState780('Recover by History');}
+}
+async function historyRec780(redo){
+ if(masterRecording||masterRecordArmed||rec780.busy)return;
+ const from=redo?rec780.redo:rec780.undo,to=redo?rec780.undo:rec780.redo;if(!from.length)return;
+ const entry=from.pop();to.push(snapshotRec780(entry.track));rec780.busy=true;updateRecControls780();
+ try{await restoreRec780(entry);}catch(e){console.error(e);status.textContent='REC history error: '+e.message;}finally{rec780.busy=false;updateRecControls780();}
+}
+async function clearRec780(track){
+ if(masterRecording||masterRecordArmed||rec780.busy)return;
+ if(!recordingSegments780(track).length)return;
+ pushRec780(track);rec780.busy=true;updateRecControls780();
+ try{if(track==='master'){masterSegments=[];await restoreMasterFromSegments();}else{rec780.micSegments=[];await rebuildMic780();}}
+ finally{rec780.busy=false;updateRecControls780();}
+}
+function saveRec780(track){
+ if(masterRecording||masterRecordArmed||rec780.busy)return;
+ const value=track==='master'?masterBlob:waveformData.microphone;if(!value)return;
+ pushRec780(track);
+ if(track==='master'){savedMasterBlob=masterBlob;setMasterState('Saved successfully');}
+ else{if(!rec780.micSegments.length)rec780.micSegments=[{start:0,buffer:value}];rec780.micSaved=value;micState780('Saved successfully');}
+ status.textContent=(track==='master'?'Master':'Microphone')+' Rec saved successfully';status.className='progress-status success';updateRecControls780();
+}
+
 
 
 
@@ -12922,10 +12631,12 @@ function stopMasterWaveformCapture() {
 
 
 // Построение и обновление формы аудиосигнала.
-function drawLiveMasterWaveform() {
-
-  drawMasterCompositeWaveform();
-
+function drawLiveMasterWaveform(){
+ if(rec780.target==='master'){drawMasterCompositeWaveform();return;}
+ const canvas=canvases.microphone;if(!canvas)return;
+ const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);
+ ctx.strokeStyle='#777';ctx.beginPath();const middle=canvas.height/2;
+ masterLivePeaks.forEach((peak,i)=>{const x=(masterRecordTimelineStart+i*2048/masterPcmSampleRate)*pixelsPerSecond;ctx.moveTo(x,middle-peak*middle);ctx.lineTo(x,middle+peak*middle);});ctx.stroke();
 }
 
 
@@ -13018,119 +12729,13 @@ function cloneMasterSegments(
 
 
 // Работа с Master/Mix и итоговым аудиосостоянием.
-function updateMasterHistoryButtons() {
-
-  undoMasterBtn.disabled =
-    masterUndoStack.length === 0;
+function updateMasterHistoryButtons(){updateRecControls780();}
 
 
-  redoMasterBtn.disabled =
-    masterRedoStack.length === 0;
-
-  if (clearMasterRecBtn) clearMasterRecBtn.disabled = !masterBlob && masterSegments.length === 0;
-  if (saveMasterRecBtn) saveMasterRecBtn.disabled = !masterBlob || savedMasterBlob === masterBlob;
-
-}
-
-
-undoMasterBtn.addEventListener(
-  "click",
-  async () => {
-
-    if (
-      masterUndoStack.length === 0
-    ) {
-
-      return;
-
-    }
-
-
-    masterRedoStack.push(
-      cloneMasterSegments(
-        masterSegments
-      )
-    );
-
-
-    masterSegments =
-      masterUndoStack.pop();
-
-
-    await restoreMasterFromSegments();
-
-
-    updateMasterHistoryButtons();
-
-  }
-);
-
-
-redoMasterBtn.addEventListener(
-  "click",
-  async () => {
-
-    if (
-      masterRedoStack.length === 0
-    ) {
-
-      return;
-
-    }
-
-
-    masterUndoStack.push(
-      cloneMasterSegments(
-        masterSegments
-      )
-    );
-
-
-    masterSegments =
-      masterRedoStack.pop();
-
-
-    await restoreMasterFromSegments();
-
-
-    updateMasterHistoryButtons();
-
-  }
-);
-
-
-// 5.4.18 | Clear Rec очищает текущую Master-запись как отдельный шаг Rec History.
-clearMasterRecBtn?.addEventListener("click", async () => {
-  if (masterRecording) stopMasterRecording();
-  if (!masterSegments.length && !masterBlob) return;
-
-  masterUndoStack.push(cloneMasterSegments(masterSegments));
-  masterRedoStack = [];
-  masterSegments = [];
-  await restoreMasterFromSegments();
-  updateMasterHistoryButtons();
-  if (saveMasterRecBtn) saveMasterRecBtn.disabled = !masterBlob;
-});
-
-// 5.5.0 | Save Rec фиксирует текущее состояние Master-дорожки для следующего Save Project.
-// Это НЕ Export: состояние сохраняется внутри Project.
-saveMasterRecBtn?.addEventListener("click", () => {
-  if (!masterBlob) return;
-
-  savedMasterBlob = masterBlob;
-
-  setMasterState(
-  "Saved successfully"
-);
-  status.textContent = "Master Rec saved successfully";
-  status.className = "progress-status success";
-
-  updateMasterHistoryButtons();
-});
-
-
-
-// Работа с Master/Mix и итоговым аудиосостоянием.
+undoMasterBtn.addEventListener('click',()=>historyRec780(false));
+redoMasterBtn.addEventListener('click',()=>historyRec780(true));
+clearMasterRecBtn?.addEventListener('click',()=>clearRec780('master'));
+saveMasterRecBtn?.addEventListener('click',()=>saveRec780('master'));
 async function restoreMasterFromSegments() {
 
   if (
@@ -13408,6 +13013,7 @@ async function getTrackBlob(track) {
     };
   }
 
+  if(track==='microphone' && rec780.micSaved) return {blob:audioBufferToWavBlob(rec780.micSaved),filename:"microphone.wav"};
   if (stemIds.includes(track)) {
     const localTrack = localSeparatedTracks.get(track);
     if (localTrack && currentStemURLs[track] === localTrack.url && !generatedTrackURLs?.[track]) {
@@ -13420,7 +13026,7 @@ async function getTrackBlob(track) {
     const response = await mynusFetch(url);
     if (!response.ok) throw new Error("Track read failed: " + track);
     const blob = await response.blob();
-    const isGenerated = track === "pitchCorrection" || track === "harmonizer";
+    const isGenerated = track === "pitchCorrection" || track === "harmonizer" || track === "microphone";
     return {
       blob,
       filename: track + (isGenerated ? ".wav" : ".mp3")
@@ -20874,6 +20480,7 @@ function changeZoom(
 
 // Очистка или сброс локального рабочего состояния.
 function resetToInitialSplit() {
+  resetRec780();
 
   if (
     masterRecording
@@ -21838,7 +21445,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "7.7.0",
+    version: "7.8.0",
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
     current_tonic: currentTrackTonic(),
@@ -22744,7 +22351,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "7.7.0";
+const MYNUS_CLIENT_VERSION = "7.8.0";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -22852,6 +22459,7 @@ async function failProjectLoader(error) {
 
 // Сохранение текущего Project и связанных данных.
 function clearProjectState() {
+  resetRec780();
   if(window.mynusMicrophone770) window.mynusMicrophone770.reset();
   void window.mynusNativeFiles.current('').catch(error=>console.warn(error.message));
   // Real-time pitch uses the shared graph; no rendered track cache.
@@ -25887,7 +25495,7 @@ async function waitForPaidResult760(data,run){
  'use strict';
  const $=id=>document.getElementById(id);
  const device=$('micDevice770'),enable=$('micEnable770'),monitor=$('micMonitor770'),message=$('micMessage770');
- let stream=null,source=null,inputGain=null,micAnalyser=null,monitorGain=null,recorder=null,recordingStart=0;
+ let stream=null,source=null,inputGain=null,micAnalyser=null,monitorGain=null;
  let generation=0,busy=false,created=false,monitoring=false,meters=null,originalMeterSource=null;
  const meterElements=[];
  function makeMeter(host,label){
@@ -25897,9 +25505,10 @@ async function waitForPaidResult760(data,run){
   meterElements.push({host,label,cover:host.querySelector('.meter-cover770'),peak:host.querySelector('.meter-peak770'),number:host.lastElementChild,held:-Infinity,until:0});
  }
  document.querySelectorAll('[data-meter770]').forEach(el=>makeMeter(el,el.dataset.meter770));
- [['L','left'],['R','right'],['Mic','mic']].forEach(([label,side])=>{
+ const stereo=document.createElement('div');stereo.className='fs-stereo780';$('lyricsFullScreenView').append(stereo);
+ [['L','right'],['R','right'],['Mic','mic']].forEach(([label,side])=>{
   const el=document.createElement('div');el.className='fs-meter770 '+side;
-  $('lyricsFullScreenView').append(el);makeMeter(el,label);
+  (label==='Mic'?$('lyricsFullScreenView'):stereo).append(el);makeMeter(el,label);
  });
  function say(text,error=false){message.textContent=text;console[error?'error':'info']('Microphone: '+text);}
  async function devices(){
@@ -25941,56 +25550,29 @@ async function waitForPaidResult760(data,run){
    monitorGain.connect(stemGainNodes.microphone);gain();monitorState();
    stream.getAudioTracks()[0].addEventListener('ended',()=>{if(stream===next){releaseInput();say('Input disconnected. Select another microphone.',true);}});
    try{localStorage.setItem('mynus_microphone_device',selected);}catch(_){}
-   await devices();enable.textContent='Disable';monitor.disabled=false;
+   await devices();enable.textContent='Microphone: On';monitor.disabled=false;
    say(stream.getAudioTracks()[0].label||'Input enabled');
   }catch(e){say(e.name+': '+e.message,true);}finally{busy=false;enable.disabled=false;}
  }
  function releaseInput(){
-  if(recorder?.state==='recording')recorder.stop();
+  if((masterRecording||masterRecordArmed)&&rec780.target==='microphone')stopMasterRecording();
   const old=stream;stream=null;old?.getTracks().forEach(t=>t.stop());
   [source,inputGain,monitorGain,micAnalyser].forEach(n=>{try{n?.disconnect();}catch(_){}});
   source=inputGain=monitorGain=micAnalyser=null;monitoring=false;
-  enable.textContent='Enable';monitor.disabled=true;monitorState();
+  enable.textContent='Microphone: Off';monitor.disabled=true;monitorState();
  }
  enable.onclick=()=>{if(stream){releaseInput();say('Microphone is off');}else turnOn();};
- device.onchange=()=>{if(recorder?.state==='recording'){say('Stop recording before changing input.',true);return;}if(stream)turnOn();};
+ device.onchange=()=>{if((masterRecording||masterRecordArmed)&&rec780.target==='microphone'){say('Stop recording before changing input.',true);return;}if(stream)turnOn();};
  monitor.onclick=()=>{monitoring=!monitoring;monitorState();};
  lyricsFullScreenMicRange?.addEventListener('input',gain);
  $('micCreate770').onclick=()=>{
   created=true;$('microphoneTrackRow').style.display='grid';$('fxTargetMicrophoneBtn').disabled=false;
   $('micCreate770').disabled=true;monitorState();drawAllWaveforms();ensureProjectTrimTrackOverlays();say('Track created');
  };
- $('micRecord770').onclick=async()=>{
-  if(recorder?.state==='recording')return;
-  if(!(duration>0)){say('Open a track or project before recording.',true);return;}
-  if(!stream)await turnOn();if(!stream)return;
-  try{
-   const destination=mixAudioContext.createMediaStreamDestination();inputGain.connect(destination);
-   const connectedInput=inputGain,epoch=generation,chunks=[],startTime=getCurrentTime();
-   const active=new MediaRecorder(destination.stream);recorder=active;
-   $('micRecord770').disabled=true;$('micStopRecord770').disabled=false;
-   active.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
-   active.onstop=async()=>{
-    try{
-     try{connectedInput.disconnect(destination);}catch(_){}destination.stream.getTracks().forEach(t=>t.stop());
-     const blob=new Blob(chunks,{type:active.mimeType});
-     if(!blob.size||epoch!==generation)return;
-     const recorded=await mixAudioContext.decodeAudioData(await blob.arrayBuffer());
-     if(epoch!==generation)return;
-     const start=Math.round(startTime*recorded.sampleRate);
-     const length=Math.max(1,Math.min(Math.ceil(duration*recorded.sampleRate),start+recorded.length));
-     const aligned=mixAudioContext.createBuffer(recorded.numberOfChannels,length,recorded.sampleRate);
-     for(let ch=0;ch<recorded.numberOfChannels;ch++)if(start<length)aligned.getChannelData(ch).set(recorded.getChannelData(ch).subarray(0,length-start),start);
-     monitoring=false;monitorState();await installGeneratedTrack('microphone',aligned);
-     say('Recording ready. Save Project to keep it.');
-    }catch(e){say('Recording error: '+e.message,true);}finally{recorder=null;$('micRecord770').disabled=false;$('micStopRecord770').disabled=true;}
-   };
-   active.start();say('Recording...');
-  }catch(e){recorder=null;$('micRecord770').disabled=false;$('micStopRecord770').disabled=true;say(e.message,true);}
- };
- $('micStopRecord770').onclick=()=>{if(recorder?.state==='recording')recorder.stop();};
+ $('micRecord770').onclick=()=>startMasterRecording('microphone');
+ $('micStopRecord770').onclick=()=>stopMasterRecording();
  function reset(){generation++;releaseInput();created=false;$('microphoneTrackRow').style.display='none';$('fxTargetMicrophoneBtn').disabled=true;$('micCreate770').disabled=false;if(fxTarget==='microphone')setFxTarget('vocals');}
- window.mynusMicrophone770={reset};
+ window.mynusMicrophone770={reset,enable:turnOn,input:()=>inputGain,enabled:()=>!!stream,monitorOff:()=>{monitoring=false;monitorState();}};
  // Playback and project restore can construct the graph without enabling input.
  const oldEnsure=ensureMixAudioGraph;
  ensureMixAudioGraph=function(){oldEnsure();setupMeters();};
@@ -25998,7 +25580,7 @@ async function waitForPaidResult760(data,run){
  const oldInstall=installGeneratedTrack;
  installGeneratedTrack=async function(id,buffer){await oldInstall(id,buffer);if(id==='microphone'){created=true;$('fxTargetMicrophoneBtn').disabled=false;$('micCreate770').disabled=true;}};
  const oldLoad=loadWaveforms;
- loadWaveforms=async function(...args){await oldLoad(...args);if(currentStemURLs.microphone){created=true;$('microphoneTrackRow').style.display='grid';$('fxTargetMicrophoneBtn').disabled=false;$('micCreate770').disabled=true;}};
+ loadWaveforms=async function(...args){await oldLoad(...args);if(currentStemURLs.microphone){rec780.micSegments=[{start:0,buffer:waveformData.microphone}];rec780.micSaved=waveformData.microphone;updateRecControls780();created=true;$('microphoneTrackRow').style.display='grid';$('fxTargetMicrophoneBtn').disabled=false;$('micCreate770').disabled=true;}};
  let nextFrame=0;
  function tick(now){
   if(now-nextFrame>=50){
@@ -26021,6 +25603,12 @@ async function waitForPaidResult760(data,run){
  devices().then(()=>{try{const saved=localStorage.getItem('mynus_microphone_device');if([...device.options].some(o=>o.value===saved))device.value=saved;}catch(_){}}).catch(e=>say(e.message,true));
  window.addEventListener('pagehide',releaseInput);
 })();
+</script><script>
+document.getElementById('micClear780').onclick=()=>clearRec780('microphone');
+document.getElementById('micSave780').onclick=()=>saveRec780('microphone');
+document.getElementById('micUndo780').onclick=()=>historyRec780(false);
+document.getElementById('micRedo780').onclick=()=>historyRec780(true);
+updateRecControls780();
 </script></body>
 </html>
   
