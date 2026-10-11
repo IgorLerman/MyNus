@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 7.3.8 | Fix tone&logs </title>
+  <title>MyNus 7.4.0 | New Architecture </title>
 
 
  <style>
@@ -5528,6 +5528,31 @@ Public License instead of this License.
 // Перехват всех логов CLIENT CONSOLE -> SERVER CMD
 // ========================================
 
+
+// Server functions have a separate address; Blob/project media stay local.
+const mynusNativeFetch=window.fetch.bind(window);
+const mynusAppOrigin=location.hostname==='mynus.local'||location.protocol==='file:';
+let mynusServerBase=(localStorage.getItem('mynusServerBase')||(mynusAppOrigin?'https://mynus.matmodelator.com':location.origin)).replace(/\/$/,'');
+let mynusSessionToken=sessionStorage.getItem('mynusSessionToken:'+mynusServerBase)||'';
+function isMynusServerPath(path){return /^\/(?:api\/|separate(?:$|\?)|progress\/|abort\/|results\/|debug\/)/.test(path);}
+function configureMynusServer(value){
+ const url=new URL(value);if(!['https:','http:'].includes(url.protocol)||url.username||url.password||url.pathname!=='/'||url.search||url.hash)throw Error('Enter a server origin, for example https://mynus.matmodelator.com');
+ mynusServerBase=url.origin;localStorage.setItem('mynusServerBase',mynusServerBase);
+ mynusSessionToken=sessionStorage.getItem('mynusSessionToken:'+mynusServerBase)||'';
+}
+async function mynusFetch(input,options={}){
+ const raw=typeof input==='string'?input:input instanceof URL?input.href:null;
+ let path=raw;
+ if(raw&&raw.startsWith(mynusServerBase+'/'))path=raw.slice(mynusServerBase.length);
+ if(!path||!isMynusServerPath(path))return mynusNativeFetch(input,options);
+ const headers=new Headers(options.headers||{});
+ if(mynusSessionToken)headers.set('Authorization','Bearer '+mynusSessionToken);
+ const response=await mynusNativeFetch(mynusServerBase+path,{...options,headers,credentials:mynusServerBase===location.origin?'same-origin':'omit'});
+ const token=response.headers.get('X-MyNus-Session');
+ if(token!==null){mynusSessionToken=token;sessionStorage.setItem('mynusSessionToken:'+mynusServerBase,token);}
+ return response;
+}
+
 (function installLocalConsole(){
  const limit=3000,entries=[];let dirty=false;
  function cleanLog(value){return String(value).replace(/\x1b\[[0-?]*[ -/]*[@-~]/g,'');}
@@ -6575,7 +6600,7 @@ async function retainSeparatedTracksLocally(data, run) {
   const required = ['vocals','drums','bass','guitar','piano','other'];
   const downloads = await Promise.allSettled(required.map(async id => {
     if (!data[id]) throw new Error('Separation result missing track: '+id);
-    const response = await fetch(data[id]);
+    const response = await mynusFetch(data[id]);
     if (!response.ok) throw new Error('Track download failed: '+id+' (HTTP '+response.status+')');
     const blob = await response.blob();
     if (!blob.size) throw new Error('Empty track: '+id);
@@ -7013,7 +7038,7 @@ async function abortCurrentSeparation(run = activeSeparation) {
 
   run.abortPromise = (async () => {
     try {
-      const response = await fetch("/abort/" + encodeURIComponent(run.jobId), {
+      const response = await mynusFetch("/abort/" + encodeURIComponent(run.jobId), {
         method: "POST",
         credentials: "same-origin"
       });
@@ -7046,7 +7071,7 @@ async function waitForSeparation(jobId, run = activeSeparation) {
     if (run.aborted) throw separationAbortedError();
     let data;
     try {
-      const response = await fetch("/progress/" + encodeURIComponent(jobId), {
+      const response = await mynusFetch("/progress/" + encodeURIComponent(jobId), {
         credentials: "same-origin",
         cache: "no-store"
       });
@@ -7189,7 +7214,7 @@ async function startSeparation(restoreRequest = null) {
 
 
       const response =
-        await fetch(
+        await mynusFetch(
           "/separate",
           {
 
@@ -7796,7 +7821,7 @@ async function loadWaveforms(originalFile, data) {
       let bytes;
       if (retained && retained.url === data[stemId]) bytes = await retained.blob.arrayBuffer();
       else {
-        const response = await fetch(data[stemId]);
+        const response = await mynusFetch(data[stemId]);
         if (!response.ok) throw new Error("Cannot load track: " + stemId);
         bytes = await response.arrayBuffer();
       }
@@ -13416,7 +13441,7 @@ async function getTrackBlob(track) {
     const url = generatedTrackURLs?.[track] || currentStemURLs?.[track] || stemAudio?.[track]?.src || null;
     if (!url) return { blob: null, filename: track + ".bin" };
 
-    const response = await fetch(url);
+    const response = await mynusFetch(url);
     if (!response.ok) throw new Error("Track read failed: " + track);
     const blob = await response.blob();
     const isGenerated = track === "pitchCorrection" || track === "harmonizer";
@@ -13804,7 +13829,7 @@ function audioBufferToWaveBlob(buffer) {
 async function decodeVocalsBuffer() {
   const sourceURL = currentStemURLs.vocals || vocalsAudio.src;
   if (!sourceURL) throw new Error("Vocals track is not available");
-  const response = await fetch(sourceURL);
+  const response = await mynusFetch(sourceURL);
   const arrayBuffer = await response.arrayBuffer();
   const context = new (window.AudioContext || window.webkitAudioContext)();
   try { return await context.decodeAudioData(arrayBuffer.slice(0)); }
@@ -15892,66 +15917,47 @@ function updateLyricsFullScreenView(currentTime) {
 
 
 // Prepared pitch audio: raw project media is never replaced in project storage.
-const preparedToneMedia = new Map();
+const localToneNodes = new Map();
 let localToneGraphPromise = null;
-let toneGeneration = 0;
-function clearPreparedToneMedia(){
- toneGeneration++;
- for(const item of preparedToneMedia.values())if(item.url)URL.revokeObjectURL(item.url);
- preparedToneMedia.clear();localToneGraphPromise=null;
+async function installLocalToneGraph() {
+  if (!mixAudioContext) return;
+  if (!lyricsFullScreenPitchSemitones && !localToneNodes.size) return;
+  if (!window.MyNusPitchEngine?.source) throw Error('Real-time Tone requires the Rubber Band library in libs/rubberband.js.');
+  if (localToneGraphPromise) return localToneGraphPromise;
+  localToneGraphPromise = (async () => {
+    if (!mixAudioContext.audioWorklet) throw new Error("Local Tone requires AudioWorklet support.");
+    const moduleUrl = URL.createObjectURL(new Blob([window.MyNusPitchEngine.source], {type:"text/javascript"}));
+    try { await mixAudioContext.audioWorklet.addModule(moduleUrl); }
+    finally { URL.revokeObjectURL(moduleUrl); }
+    const node = new AudioWorkletNode(mixAudioContext,"rubberband-processor",{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[2],channelCount:2,channelCountMode:"explicit"});
+    node.port.postMessage(JSON.stringify(["quality",true]));
+    const ready = new Promise((resolve,reject) => {
+      const timer = setTimeout(() => reject(new Error("Rubber Band initialization timed out")),20000);
+      node.port.onmessage = event => { if(event.data?.type === "ready") {clearTimeout(timer);resolve();} };
+      node.onprocessorerror = () => {clearTimeout(timer);reject(new Error("Rubber Band audio processor failed"));};
+    });
+    // All non-Original audio reaches this bus; Original has its own playback path.
+    masterFadeGainNode.disconnect(mixAudioContext.destination);
+    masterFadeGainNode.disconnect(masterAnalyserNode);
+    masterFadeGainNode.disconnect(masterRecordBus);
+    masterFadeGainNode.connect(node);
+    node.connect(mixAudioContext.destination);
+    node.connect(masterAnalyserNode);
+    node.connect(masterRecordBus);
+    localToneNodes.set("mix",node);
+    updateLocalToneParameters();
+    if(mixAudioContext.state === "suspended") await mixAudioContext.resume();
+    await ready;
+  })();
+  try { await localToneGraphPromise; }
+  catch(error) { localToneGraphPromise=null; throw error; }
 }
-async function installLocalToneGraph(){
- if(localToneGraphPromise)return localToneGraphPromise;
- const generation=toneGeneration;
- localToneGraphPromise=(async()=>{
-  const ctx=mixAudioContext;
-  if(!ctx)return;
-  while(generation===toneGeneration){
-   const shift=lyricsFullScreenPitchSemitones;
-   const tracks=stemIds.filter(id=>generatedTrackURLs[id]||currentStemURLs[id]||preparedToneMedia.has(id));
-   if(savedMasterBlob||masterBlob)tracks.push('master');
-   const cursor=getCurrentTime();
-   const changed=[];
-   for(const id of tracks){
-    const source=await getTrackBlob(id);if(!source.blob)continue;
-    const audio=id==='master'?masterAudio:stemAudio[id];
-    let entry=preparedToneMedia.get(id);
-    if(!entry||entry.blob!==source.blob){
-     // Blob reads may produce a new object; URL identifies unchanged stem sources.
-     const key=id==='master'?source.blob:(generatedTrackURLs[id]||currentStemURLs[id]);
-     if(!entry||entry.key!==key){
-      if(entry?.url)URL.revokeObjectURL(entry.url);
-      entry={blob:source.blob,key,rawURL:audio.src,shift:0,url:null};preparedToneMedia.set(id,entry);
-     }
-    }
-    if(entry.shift===shift)continue;
-    if(!changed.length)pauseAll();
-    status.textContent='Preparing tone '+(shift>0?'+':'')+shift+' — '+id+'…';
-    status.className='progress-status process';
-    let url=entry.rawURL;
-    if(shift){
-     const raw=await ctx.decodeAudioData(await entry.blob.arrayBuffer());
-     const result=await shiftExportAudio(raw,shift,ctx);
-     url=URL.createObjectURL(audioBufferToWavBlob(result));
-    }
-    if(generation!==toneGeneration||shift!==lyricsFullScreenPitchSemitones){if(shift)URL.revokeObjectURL(url);break;}
-    changed.push({id,entry,audio,url,shift});
-   }
-   if(generation!==toneGeneration){for(const item of changed)if(item.shift)URL.revokeObjectURL(item.url);return;}
-   if(shift!==lyricsFullScreenPitchSemitones){for(const item of changed)if(item.shift)URL.revokeObjectURL(item.url);continue;}
-   for(const item of changed){
-    const old=item.entry.url;item.audio.src=item.url;item.audio.load();
-    await new Promise((resolve,reject)=>{if(item.audio.readyState>=1)return resolve();item.audio.addEventListener('loadedmetadata',resolve,{once:true});item.audio.addEventListener('error',()=>reject(Error('Prepared track failed: '+item.id)),{once:true});});
-    item.entry.url=item.shift?item.url:null;item.entry.shift=item.shift;
-    if(old)URL.revokeObjectURL(old);
-   }
-   if(changed.length){setGlobalCursorTime(cursor);status.textContent='Tone ready: '+(shift>0?'+':'')+shift;status.className='progress-status success';}
-   return;
+function updateLocalToneParameters() {
+  for(const node of localToneNodes.values()) {
+    node.port.postMessage(JSON.stringify(["tempo",1]));
+    node.port.postMessage(JSON.stringify(["pitch",Math.pow(2,lyricsFullScreenPitchSemitones/12)]));
   }
- })();
- try{await localToneGraphPromise;}finally{localToneGraphPromise=null;}
 }
-function updateLocalToneParameters() {}
 function showLocalToneError(error) {
   console.error("Local Tone:",error);
   status.textContent = "Tone unavailable: " + error.message;
@@ -21843,7 +21849,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "7.3.8",
+    version: "7.4.0",
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
     current_tonic: currentTrackTonic(),
@@ -22745,7 +22751,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "7.3.8";
+const MYNUS_CLIENT_VERSION = "7.4.0";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -22853,7 +22859,7 @@ async function failProjectLoader(error) {
 
 // Сохранение текущего Project и связанных данных.
 function clearProjectState() {
-  clearPreparedToneMedia();
+  // Real-time pitch uses the shared graph; no rendered track cache.
   releaseLocalSeparatedTracks();
   // Очищаем ВСЁ текущее рабочее состояние Project/файла.
   // PlayList намеренно исключён: playlist.json/current/queue/history
@@ -23080,7 +23086,7 @@ progressPercent.textContent = "100%";
 
     const originalUrl = withLoadTraceUrl(tracks.original, "original");
     await reportProjectLoadTrace("HTTP REQUEST", { command: "GET Original track", function: "fetch", parameters: { track: "original", url: originalUrl }, result: "sending" });
-    const originalResponse = await fetch(originalUrl, { headers: loadTraceHeaders() });
+    const originalResponse = await mynusFetch(originalUrl, { headers: loadTraceHeaders() });
     if (!originalResponse.ok) throw new Error("Project Original track not found");
     const originalBlob = await originalResponse.blob();
     const originalFile = new File(
@@ -23169,7 +23175,7 @@ progressPercent.textContent = "100%";
     // 5.5.0 | Восстанавливаем Save Rec из Project как полноценную Master-дорожку.
     if (tracks.master) {
       const masterUrl = withLoadTraceUrl(tracks.master, "master");
-      const masterResponse = await fetch(masterUrl, { headers: loadTraceHeaders() });
+      const masterResponse = await mynusFetch(masterUrl, { headers: loadTraceHeaders() });
       if (!masterResponse.ok) throw new Error("Project Master track not found");
 
       const loadedMasterBlob = await masterResponse.blob();
@@ -24280,13 +24286,13 @@ document.addEventListener("click", event => {
     return Object.fromEntries(['phone','first_name','last_name','country'].map(name => [name, form.elements[name].value.trim()]));
   }
   async function api(path, data) {
-    const response = await fetch(path, {method:'POST', credentials:'same-origin',
+    const response = await mynusFetch(path, {method:'POST', credentials:'same-origin',
       headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
     if (!response.headers.get('content-type')?.includes('application/json')) {
-      throw new Error('Server returned HTML instead of a REG/LOG response (HTTP ' + response.status + '). Open MyNus at http://127.0.2.1:5000 and make sure server 7.0.2 is running.');
+      throw new Error('Account request ('+response.status+'): the configured server did not return JSON. Check Server address.');
     }
     const result = await response.json();
-    if (!response.ok) {const error = new Error(result.error || 'Server error'); error.result = result; throw error;}
+    if (!response.ok) {const error = new Error('Request error ('+response.status+'): '+(result.error || response.statusText)); error.result = result; throw error;}
     return result;
   }
   let accountUser = null, accountRequest = null;
@@ -24405,7 +24411,7 @@ document.addEventListener("click", event => {
 
   async function loadPayments() {
     try {
-      const response = await fetch('/api/account/payments', {credentials:'same-origin', cache:'no-store'});
+      const response = await mynusFetch('/api/account/payments', {credentials:'same-origin', cache:'no-store'});
       if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) throw new Error('Unable to load payment details.');
       const data = await response.json();
       const sub = data.subscription;
@@ -24435,10 +24441,7 @@ document.addEventListener("click", event => {
     if (!dialog.open) dialog.show();
   }
   open.addEventListener('click', async () => {
-    if (location.protocol === 'file:') {
-      if (dialog.open) {dialog.close();return;}
-      showLocalAccountNotice();openAuthDialog();return;
-    }
+
     if (!accountChecked) await checkAccountOnDemand();
     if (authenticated) {
       if (dialog.open) { dialog.close(); return; }
@@ -24494,7 +24497,7 @@ document.addEventListener("click", event => {
   function checkAccountOnDemand() {
     if (accountCheckPromise) return accountCheckPromise;
     accountChecked = true;
-    accountCheckPromise = fetch('/api/current-user', {credentials:'same-origin', cache:'no-store', signal:AbortSignal.timeout(5000)})
+    accountCheckPromise = mynusFetch('/api/current-user', {credentials:'same-origin', cache:'no-store', signal:AbortSignal.timeout(5000)})
 
     .then(async response => {
       if (response.status === 401) return;
@@ -25477,7 +25480,7 @@ async function restoreMynusSnapshot(saved) {
 <button id="mnConsoleButton" type="button" aria-controls="mnConsolePanel" aria-expanded="true">Console</button>
 <aside id="mnConsolePanel" aria-label="Local console">
 <header><strong>Console</strong><button id="mnConsoleClose" type="button" aria-label="Hide console">×</button></header>
-<div class="mnConsoleActions"><button id="mnConsoleCopy" type="button">Copy</button><button id="mnConsoleSave" type="button">Save .log</button><button id="mnConsoleServer" type="button">Server logs</button><button id="mnConsoleClear" type="button">Clear</button></div>
+<div class="mnConsoleActions"><button id="mnConsoleCopy" type="button">Copy</button><button id="mnConsoleSave" type="button">Save .log</button><button id="mnConsoleServer" type="button">Server logs</button><button id="mnServerAddress" type="button">Server address</button><button id="mnConsoleClear" type="button">Clear</button></div>
 <textarea id="mnConsoleText" readonly spellcheck="false" aria-label="Local log"></textarea>
 <div id="mnConsoleNotice" role="status">Local logs</div>
 </aside>
@@ -25499,18 +25502,28 @@ async function restoreMynusSnapshot(saved) {
 
  let serverStream=null,lastServerLogId=0;
  const serverButton=document.getElementById('mnConsoleServer');
- function connectServerLogs(){
-  if(serverStream){serverStream.close();serverStream=null;serverButton.textContent='Server logs';notice.textContent='Server logs disconnected';return;}
-  const base=location.protocol==='file:'?'http://127.0.0.1:5000':location.origin;
-  const stream=new EventSource(base+'/debug/server-logs?after='+lastServerLogId);serverStream=stream;
-  serverButton.textContent='Disconnect server';notice.textContent='Connecting to server…';
-  stream.onopen=()=>{notice.textContent='Local + server logs';};
-  stream.onmessage=event=>{try{const record=JSON.parse(event.data);if(record.id<=lastServerLogId)return;lastServerLogId=record.id;window.mynusLocalConsole.appendServer(record);}catch(_) {}};
-  stream.onerror=()=>{stream.close();if(serverStream===stream)serverStream=null;serverButton.textContent='Server logs';notice.textContent='Server unavailable. Local logs remain active.';};
+ function disconnectServerLogs(){serverStream?.abort();serverStream=null;serverButton.textContent='Server logs';}
+ async function connectServerLogs(){
+  if(serverStream){disconnectServerLogs();return;}
+  const controller=new AbortController();serverStream=controller;serverButton.textContent='Disconnect server';notice.textContent='Connecting…';
+  try{
+   const response=await mynusFetch('/debug/server-logs?after='+lastServerLogId,{signal:controller.signal});
+   if(!response.ok)throw Error('Server logs ('+response.status+'): '+(response.status===401?'Sign in or register to continue.':'Connection failed.'));
+   if(!response.headers.get('content-type')?.includes('text/event-stream'))throw Error('Server did not return a log stream.');
+   notice.textContent='Local + server logs';const reader=response.body.getReader(),decoder=new TextDecoder();let pending='';
+   while(!controller.signal.aborted){const chunk=await reader.read();if(chunk.done)break;pending+=decoder.decode(chunk.value,{stream:true});let index;
+    while((index=pending.indexOf('\n\n'))>=0){const packet=pending.slice(0,index);pending=pending.slice(index+2);const data=packet.split('\n').filter(line=>line.startsWith('data:')).map(line=>line.slice(5).trimStart()).join('\n');if(!data)continue;const record=JSON.parse(data);if(record.id<=lastServerLogId)continue;lastServerLogId=record.id;window.mynusLocalConsole.appendServer(record);}
+   }
+  }catch(error){if(error.name!=='AbortError')notice.textContent=error.message;}
+  finally{if(serverStream===controller){serverStream=null;serverButton.textContent='Server logs';}}
  }
  serverButton.addEventListener('click',connectServerLogs);
- window.addEventListener('pagehide',()=>serverStream?.close());
- if(location.protocol==='http:'||location.protocol==='https:')connectServerLogs();
+ document.getElementById('mnServerAddress').addEventListener('click',()=>{
+  const value=prompt('Server address',mynusServerBase);if(value===null)return;
+  try{disconnectServerLogs();configureMynusServer(value.trim());lastServerLogId=0;notice.textContent='Server address saved. Reload to refresh Account.';}catch(error){notice.textContent=error.message;}
+ });
+ window.addEventListener('pagehide',disconnectServerLogs);
+ if(!mynusAppOrigin)connectServerLogs();
  window.mynusLocalConsole.refresh();
 console.info(document.title + ' — интерфейс запущен.');
 })();
