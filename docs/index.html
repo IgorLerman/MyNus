@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>BaseUpDate&LogOut | 7.6.0 </title>
+  <title>MicroPhone | 7.7.0 </title>
 
 
  <style>
@@ -3444,7 +3444,7 @@ window.addEventListener('keydown',event=>{
    if(message.error)request.reject(new Error(message.error));else request.resolve(message.result);
  });
  function request(action,data={}) {
-   if(!available())return Promise.reject(new Error('Update MyNus.exe to 7.6.0 to use the project folder.'));
+   if(!available())return Promise.reject(new Error('Update MyNus.exe to 7.7.0 to use the project folder.'));
    const id=crypto.randomUUID();
    return new Promise((resolve,reject)=>{
      const timer=setTimeout(()=>{pending.delete(id);reject(new Error('Desktop file operation timed out.'));},1800000);
@@ -3480,7 +3480,7 @@ window.addEventListener('keydown',event=>{
 
 </script>
 <style>
-/* 7.6.0 compact track headings and desktop header */
+/* 7.7.0 compact track headings and desktop header */
 .track-controls{grid-template-columns:max-content minmax(0,1fr)!important;}
 .track-title{white-space:nowrap;display:flex;align-items:center;gap:4px;}
 .track-title .track-tonic{display:inline!important;margin:0!important;}
@@ -3516,6 +3516,20 @@ html.mynus-native-header #mnConsoleButton,html.mynus-native-header #mnLoginButto
 #mnConsolePanel #mnConsoleNotice{background:#e6e6e6;color:#555;padding:6px;font-size:11px;overflow-wrap:anywhere;}
 .result-access760{position:fixed;z-index:25000;left:50%;top:50%;transform:translate(-50%,-50%);background:#fff;color:#222;border:1px solid #ccc;border-radius:8px;box-shadow:0 4px 30px #0004;padding:20px;width:min(440px,calc(100vw - 48px));}
 .result-access760 button{margin:8px 6px 0 0;}
+</style><style>#microphonePanel770{border-top:1px solid #ddd;margin-top:10px;padding-top:8px;display:flex;flex-direction:column;gap:6px;font-size:12px}
+#micDevice770{width:100%;min-width:0;padding:5px}.mic-actions770{display:flex;gap:5px}.mic-actions770 button{flex:1}
+.meters770{display:flex;justify-content:space-around;gap:12px;padding:6px}
+.meter770{display:flex;flex-direction:column;align-items:center;gap:3px;font:10px monospace}
+.meter-scale770{position:relative;height:130px;width:18px;border:1px solid #777;background:#171717;border-radius:3px;overflow:hidden}
+.meter-colour770{position:absolute;inset:0;background:linear-gradient(to top,#8c20cc 0%,#245cff 20%,#00cbd4 40%,#49ca48 60%,#f5de38 78%,#ff9830 89%,#f22 89%,#f22 100%)}
+.meter-cover770{position:absolute;left:0;right:0;top:0;height:100%;background:#171717;transition:height 55ms linear}
+.meter-zero770{position:absolute;left:0;right:0;top:11.1%;height:1px;background:#fff;z-index:1}
+.meter-peak770{position:absolute;left:0;right:0;bottom:0;height:2px;background:white;z-index:2}
+.fs-meter770{position:absolute;bottom:110px;z-index:5;color:#ddd;pointer-events:none}.fs-meter770 .meter-scale770{height:190px;width:20px}
+.fs-meter770.left{left:75px}.fs-meter770.right{right:75px}.fs-meter770.mic{left:22px}
+.lyrics-fullscreen-side-control.left{left:112px}.lyrics-fullscreen-side-control.right{right:112px}
+@media(max-width:700px){.fs-meter770.left{left:55px}.fs-meter770.right{right:55px}.fs-meter770.mic{left:12px}.lyrics-fullscreen-side-control.left{left:85px}.lyrics-fullscreen-side-control.right{right:85px}}
+#micMessage770{overflow-wrap:anywhere}.microphone-live770{color:#168bba}
 </style></head>
 
 
@@ -4371,6 +4385,17 @@ html.mynus-native-header #mnConsoleButton,html.mynus-native-header #mnLoginButto
          MASTER TRACK
     ======================================== -->
 
+    <div class="track generated-track" id="microphoneTrackRow">
+      <div class="track-controls">
+        <div class="track-title">Microphone <span class="track-tonic" data-track-tonic="microphone">—</span></div>
+        <div class="track-buttons"><button id="microphoneMuteBtn">Mute</button><button id="microphoneSoloBtn">Solo</button></div>
+        <div class="volume-row"><input type="range" id="microphoneVolume" min="0" max="100" value="100"><span id="microphoneVolumeValue" class="volume-value">100%</span></div>
+        <div class="track-save-row"><button data-export-track="microphone" data-export-scope="full">Export Track</button><button data-export-track="microphone" data-export-scope="selection">Export Selection</button></div>
+        <div class="track-buttons"><button id="micRecord770">Rec On</button><button id="micStopRecord770" disabled>Rec Off</button></div><div class="track-save-row crop-row"><button id="microphoneCropInBtn">Crop In</button><button id="microphoneCropOutBtn">Crop Out</button></div>
+      </div>
+      <div class="timeline-scroll" data-track="microphone"><div class="timeline-inner" id="microphoneTimeline"><canvas id="microphoneCanvas"></canvas><div id="microphoneCropMaskLeft" class="crop-mask"></div><div id="microphoneCropMaskRight" class="crop-mask"></div><div class="playhead" id="microphonePlayhead"></div></div></div>
+    </div>
+
     <div class="track">
 
       <div class="track-controls master-controls">
@@ -4681,6 +4706,7 @@ html.mynus-native-header #mnConsoleButton,html.mynus-native-header #mnLoginButto
 
         </div>
 
+        <div class="fx-target-master-row"><button id="fxTargetMicrophoneBtn" disabled>Microphone</button></div>
         <div class="fx-target-master-row">
 
           <button id="fxTargetMasterBtn">
@@ -4995,7 +5021,12 @@ html.mynus-native-header #mnConsoleButton,html.mynus-native-header #mnLoginButto
 
         </div>
 
-      </aside>
+      <section id="microphonePanel770"><strong>Microphone</strong>
+<select id="micDevice770" aria-label="Microphone device"><option value="default">Windows default input</option></select>
+<div class="mic-actions770"><button id="micEnable770">Enable</button><button id="micMonitor770" disabled>Monitor: Off</button></div>
+<button id="micCreate770" class="fx-create-button">Create New Track</button>
+<div class="meters770"><div data-meter770="L"></div><div data-meter770="Mic"></div><div data-meter770="R"></div></div>
+<small id="micMessage770">Microphone is off</small></section></aside>
 
     </div>
 
@@ -5336,6 +5367,7 @@ html.mynus-native-header #mnConsoleButton,html.mynus-native-header #mnLoginButto
 <audio id="vocalsAudio"></audio>
 <audio id="pitchCorrectionAudio"></audio>
 <audio id="harmonizerAudio"></audio>
+<audio id="microphoneAudio"></audio>
 <audio id="drumsAudio"></audio>
 <audio id="bassAudio"></audio>
 <audio id="guitarAudio"></audio>
@@ -5920,10 +5952,15 @@ const pitchCorrectionSoloBtn = document.getElementById("pitchCorrectionSoloBtn")
 const pitchCorrectionVolume = document.getElementById("pitchCorrectionVolume");
 const pitchCorrectionVolumeValue = document.getElementById("pitchCorrectionVolumeValue");
 const harmonizerAudio = document.getElementById("harmonizerAudio");
+const microphoneAudio = document.getElementById("microphoneAudio");
 const harmonizerMuteBtn = document.getElementById("harmonizerMuteBtn");
+const microphoneMuteBtn = document.getElementById("microphoneMuteBtn");
 const harmonizerSoloBtn = document.getElementById("harmonizerSoloBtn");
+const microphoneSoloBtn = document.getElementById("microphoneSoloBtn");
 const harmonizerVolume = document.getElementById("harmonizerVolume");
+const microphoneVolume = document.getElementById("microphoneVolume");
 const harmonizerVolumeValue = document.getElementById("harmonizerVolumeValue");
+const microphoneVolumeValue = document.getElementById("microphoneVolumeValue");
 const createPitchCorrectionBtn = document.getElementById("createPitchCorrectionBtn");
 const createHarmonizerBtn = document.getElementById("createHarmonizerBtn");
 
@@ -6019,7 +6056,9 @@ const vocalsCropOutBtn =
 const pitchCorrectionCropInBtn = document.getElementById("pitchCorrectionCropInBtn");
 const pitchCorrectionCropOutBtn = document.getElementById("pitchCorrectionCropOutBtn");
 const harmonizerCropInBtn = document.getElementById("harmonizerCropInBtn");
+const microphoneCropInBtn = document.getElementById("microphoneCropInBtn");
 const harmonizerCropOutBtn = document.getElementById("harmonizerCropOutBtn");
+const microphoneCropOutBtn = document.getElementById("microphoneCropOutBtn");
 
 const drumsCropInBtn =
   document.getElementById("drumsCropInBtn");
@@ -6059,7 +6098,9 @@ const vocalsCropMaskRight =
 const pitchCorrectionCropMaskLeft = document.getElementById("pitchCorrectionCropMaskLeft");
 const pitchCorrectionCropMaskRight = document.getElementById("pitchCorrectionCropMaskRight");
 const harmonizerCropMaskLeft = document.getElementById("harmonizerCropMaskLeft");
+const microphoneCropMaskLeft = document.getElementById("microphoneCropMaskLeft");
 const harmonizerCropMaskRight = document.getElementById("harmonizerCropMaskRight");
+const microphoneCropMaskRight = document.getElementById("microphoneCropMaskRight");
 
 const drumsCropMaskLeft =
   document.getElementById("drumsCropMaskLeft");
@@ -6143,6 +6184,7 @@ const canvases = {
     document.getElementById("vocalsCanvas"),
   pitchCorrection: document.getElementById("pitchCorrectionCanvas"),
   harmonizer: document.getElementById("harmonizerCanvas"),
+  microphone: document.getElementById("microphoneCanvas"),
 
   drums:
     document.getElementById("drumsCanvas"),
@@ -6174,6 +6216,7 @@ const timelines = {
     document.getElementById("vocalsTimeline"),
   pitchCorrection: document.getElementById("pitchCorrectionTimeline"),
   harmonizer: document.getElementById("harmonizerTimeline"),
+  microphone: document.getElementById("microphoneTimeline"),
 
   drums:
     document.getElementById("drumsTimeline"),
@@ -6209,6 +6252,8 @@ const playheads = {
 
   harmonizer:
     document.getElementById("harmonizerPlayhead"),
+  microphone:
+    document.getElementById("microphonePlayhead"),
 
   drums:
     document.getElementById("drumsPlayhead"),
@@ -6263,6 +6308,7 @@ let waveformData = {
   vocals: null,
   pitchCorrection: null,
   harmonizer: null,
+  microphone: null,
   drums: null,
   bass: null,
   guitar: null,
@@ -6275,6 +6321,7 @@ let waveformData = {
 
 
 const stemIds = [
+  "microphone",
   "vocals",
   "pitchCorrection",
   "harmonizer",
@@ -6582,6 +6629,7 @@ const fxSettings = {
   harmonizer: {
     ...defaultFxSettings
   },
+  microphone: {...defaultFxSettings},
 
   drums: {
     ...defaultFxSettings
@@ -9119,6 +9167,7 @@ const stemAudio = {
   vocals: vocalsAudio,
   pitchCorrection: pitchCorrectionAudio,
   harmonizer: harmonizerAudio,
+  microphone: microphoneAudio,
   drums: drumsAudio,
   bass: bassAudio,
   guitar: guitarAudio,
@@ -9131,6 +9180,7 @@ const stemMuteButtons = {
   vocals: vocalsMuteBtn,
   pitchCorrection: pitchCorrectionMuteBtn,
   harmonizer: harmonizerMuteBtn,
+  microphone: microphoneMuteBtn,
   drums: drumsMuteBtn,
   bass: bassMuteBtn,
   guitar: guitarMuteBtn,
@@ -9143,6 +9193,7 @@ const stemSoloButtons = {
   vocals: vocalsSoloBtn,
   pitchCorrection: pitchCorrectionSoloBtn,
   harmonizer: harmonizerSoloBtn,
+  microphone: microphoneSoloBtn,
   drums: drumsSoloBtn,
   bass: bassSoloBtn,
   guitar: guitarSoloBtn,
@@ -9155,6 +9206,7 @@ const stemVolumeControls = {
   vocals: vocalsVolume,
   pitchCorrection: pitchCorrectionVolume,
   harmonizer: harmonizerVolume,
+  microphone: microphoneVolume,
   drums: drumsVolume,
   bass: bassVolume,
   guitar: guitarVolume,
@@ -9167,6 +9219,7 @@ const stemVolumeValues = {
   vocals: vocalsVolumeValue,
   pitchCorrection: pitchCorrectionVolumeValue,
   harmonizer: harmonizerVolumeValue,
+  microphone: microphoneVolumeValue,
   drums: drumsVolumeValue,
   bass: bassVolumeValue,
   guitar: guitarVolumeValue,
@@ -9178,6 +9231,7 @@ const stemCropInButtons = {
   vocals: vocalsCropInBtn,
   pitchCorrection: pitchCorrectionCropInBtn,
   harmonizer: harmonizerCropInBtn,
+  microphone: microphoneCropInBtn,
   drums: drumsCropInBtn,
   bass: bassCropInBtn,
   guitar: guitarCropInBtn,
@@ -9189,6 +9243,7 @@ const stemCropOutButtons = {
   vocals: vocalsCropOutBtn,
   pitchCorrection: pitchCorrectionCropOutBtn,
   harmonizer: harmonizerCropOutBtn,
+  microphone: microphoneCropOutBtn,
   drums: drumsCropOutBtn,
   bass: bassCropOutBtn,
   guitar: guitarCropOutBtn,
@@ -9200,6 +9255,7 @@ const stemCropMaskLeft = {
   vocals: vocalsCropMaskLeft,
   pitchCorrection: pitchCorrectionCropMaskLeft,
   harmonizer: harmonizerCropMaskLeft,
+  microphone: microphoneCropMaskLeft,
   drums: drumsCropMaskLeft,
   bass: bassCropMaskLeft,
   guitar: guitarCropMaskLeft,
@@ -9211,6 +9267,7 @@ const stemCropMaskRight = {
   vocals: vocalsCropMaskRight,
   pitchCorrection: pitchCorrectionCropMaskRight,
   harmonizer: harmonizerCropMaskRight,
+  microphone: microphoneCropMaskRight,
   drums: drumsCropMaskRight,
   bass: bassCropMaskRight,
   guitar: guitarCropMaskRight,
@@ -10221,6 +10278,7 @@ function updateEffectiveVocalRange() {
 // ========================================
 
 const fxTargetButtons = {
+  microphone: document.getElementById("fxTargetMicrophoneBtn"),
 
   vocals:
     fxTargetVocalsBtn,
@@ -13736,7 +13794,7 @@ async function exportTrack(track,scope,format='wav'){
 // ========================================
 // СГЕНЕРИРОВАННЫЕ ВОКАЛЬНЫЕ ДОРОЖКИ ЭФФЕКТОВ | 4.6.0
 // ========================================
-let generatedTrackURLs = { pitchCorrection: null, harmonizer: null };
+let generatedTrackURLs = { microphone: null, pitchCorrection: null, harmonizer: null };
 
 // Локальная функциональная операция этого блока.
 function audioBufferToWaveBlob(buffer) {
@@ -16084,7 +16142,7 @@ function renderLyricsFullScreenTracksMenu() {
   if (title) lyricsFullScreenTracksMenu.appendChild(title);
 
   const labels = {
-    vocals: "Vocals", pitchCorrection: "Pitch Correct", harmonizer: "Harmonizer",
+    vocals: "Vocals", pitchCorrection: "Pitch Correct", harmonizer: "Harmonizer", microphone: "Microphone",
     drums: "Drums", bass: "Bass", guitar: "Guitar", piano: "Piano", other: "Other"
   };
 
@@ -16187,7 +16245,7 @@ function refreshLyricsFullScreenFxWindow(stemId, win) {
 function openLyricsFullScreenFxWindow(stemId, anchorRect) {
   let win = lyricsFullScreenFxWindows.get(stemId);
   if (!win) {
-    const labels = {vocals:"Vocals",pitchCorrection:"Pitch Correct",harmonizer:"Harmonizer",drums:"Drums",bass:"Bass",guitar:"Guitar",piano:"Piano",other:"Other"};
+    const labels = {vocals:"Vocals",pitchCorrection:"Pitch Correct",harmonizer:"Harmonizer",microphone:"Microphone",drums:"Drums",bass:"Bass",guitar:"Guitar",piano:"Piano",other:"Other"};
     win = document.createElement("div");
     win.className = "lyrics-fullscreen-popup lyrics-fullscreen-fx-window";
     win.hidden = true;
@@ -21718,6 +21776,7 @@ function setProjectActive(projectId = null) {
 
 
 const projectTrackIds = [
+  "microphone",
   "original", "vocals", "pitchCorrection", "harmonizer",
   "drums", "bass", "guitar", "piano", "other", "master",
   "reserve1", "reserve2", "reserve3"
@@ -21779,7 +21838,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "7.6.0",
+    version: "7.7.0",
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
     current_tonic: currentTrackTonic(),
@@ -22685,7 +22744,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "7.6.0";
+const MYNUS_CLIENT_VERSION = "7.7.0";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -22793,6 +22852,7 @@ async function failProjectLoader(error) {
 
 // Сохранение текущего Project и связанных данных.
 function clearProjectState() {
+  if(window.mynusMicrophone770) window.mynusMicrophone770.reset();
   void window.mynusNativeFiles.current('').catch(error=>console.warn(error.message));
   // Real-time pitch uses the shared graph; no rendered track cache.
   releaseLocalSeparatedTracks();
@@ -22820,7 +22880,7 @@ function clearProjectState() {
   originalAudio.removeAttribute("src");
   originalAudio.load();
 
-  for (const trackId of ["pitchCorrection", "harmonizer"]) {
+  for (const trackId of ["pitchCorrection", "harmonizer", "microphone"]) {
     const url = generatedTrackURLs?.[trackId];
     if (url && String(url).startsWith("blob:")) {
       try { URL.revokeObjectURL(url); } catch (_) {}
@@ -23050,7 +23110,7 @@ progressPercent.textContent = "100%";
     await advanceProjectLoad(2, 180);
     await advanceProjectLoad(3);
 
-    for (const trackId of ["pitchCorrection", "harmonizer"]) {
+    for (const trackId of ["pitchCorrection", "harmonizer", "microphone"]) {
       if (generatedTrackURLs[trackId]?.startsWith("blob:")) {
         try { URL.revokeObjectURL(generatedTrackURLs[trackId]); } catch (_) {}
       }
@@ -24360,8 +24420,8 @@ document.addEventListener("click", event => {
       const data = await response.json();
       const sub = data.subscription;
       document.getElementById('mnPaymentSummary').textContent = sub
-        ? 'Plan: ' + sub.plan_name + ' · Status: ' + sub.status + ' · Current period ends: ' + sub.ends_at
-        : 'Plan: — · Status: No subscription';
+        ? 'Plan: ' + sub.plan_name + ' · Status: ' + (data.access_status || 'No access') + ' · Current period ends: ' + sub.ends_at
+        : 'Plan: — · Status: ' + (data.access_status || 'No access');
       accountStatus('mnPaymentNotice',data.message || 'Payment information loaded successfully.','success');
       const history = document.getElementById('mnPaymentHistory'); history.replaceChildren();
       const title = document.createElement('h4'); title.textContent = 'Recent payments'; history.append(title);
@@ -25822,6 +25882,145 @@ async function waitForPaidResult760(data,run){
   };
  });
 }
+</script><script>// Local input, post-fader meters and an ordinary project audio track.
+(() => {
+ 'use strict';
+ const $=id=>document.getElementById(id);
+ const device=$('micDevice770'),enable=$('micEnable770'),monitor=$('micMonitor770'),message=$('micMessage770');
+ let stream=null,source=null,inputGain=null,micAnalyser=null,monitorGain=null,recorder=null,recordingStart=0;
+ let generation=0,busy=false,created=false,monitoring=false,meters=null,originalMeterSource=null;
+ const meterElements=[];
+ function makeMeter(host,label){
+  host.classList.add('meter770');
+  host.innerHTML='<span></span><div class="meter-scale770"><div class="meter-colour770"></div><div class="meter-cover770"></div><div class="meter-zero770" title="0 dBFS"></div><div class="meter-peak770"></div></div><span class="meter-number770">−∞</span>';
+  host.firstElementChild.textContent=label;
+  meterElements.push({host,label,cover:host.querySelector('.meter-cover770'),peak:host.querySelector('.meter-peak770'),number:host.lastElementChild,held:-Infinity,until:0});
+ }
+ document.querySelectorAll('[data-meter770]').forEach(el=>makeMeter(el,el.dataset.meter770));
+ [['L','left'],['R','right'],['Mic','mic']].forEach(([label,side])=>{
+  const el=document.createElement('div');el.className='fs-meter770 '+side;
+  $('lyricsFullScreenView').append(el);makeMeter(el,label);
+ });
+ function say(text,error=false){message.textContent=text;console[error?'error':'info']('Microphone: '+text);}
+ async function devices(){
+  if(!navigator.mediaDevices?.enumerateDevices)return;
+  const selected=device.value;
+  const inputs=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='audioinput'&&d.deviceId!=='default'&&d.deviceId!=='communications');
+  device.replaceChildren(new Option('Windows default input','default'));
+  inputs.forEach((d,i)=>device.add(new Option(d.label||'Input '+(i+1),d.deviceId)));
+  if([...device.options].some(o=>o.value===selected))device.value=selected;
+ }
+ function gain(){if(inputGain)inputGain.gain.value=Number(lyricsFullScreenMicRange?.value||0)/100;}
+ function monitorState(){
+  if(monitorGain)monitorGain.gain.value=monitoring&&created?1:0;
+  monitor.textContent='Monitor: '+(monitoring?'On':'Off');
+ }
+ function setupMeters(){
+  if(meters||!mixAudioContext)return;
+  const splitter=mixAudioContext.createChannelSplitter(2);
+  const l=mixAudioContext.createAnalyser(),r=mixAudioContext.createAnalyser();
+  l.fftSize=r.fftSize=1024;
+  masterAnalyserNode.connect(splitter);splitter.connect(l,0);splitter.connect(r,1);
+  // Original plays outside the stem graph. Tap it without changing its volume.
+  originalMeterSource=mixAudioContext.createMediaElementSource(originalAudio);
+  originalMeterSource.connect(mixAudioContext.destination);originalMeterSource.connect(splitter);
+  meters={L:l,R:r};
+ }
+ async function turnOn(){
+  if(busy)return;busy=true;enable.disabled=true;
+  try{
+   if(!navigator.mediaDevices?.getUserMedia)throw Error('Microphone capture is unavailable.');
+   const selected=device.value;
+   const epoch=generation;
+   const next=await navigator.mediaDevices.getUserMedia({audio:{deviceId:selected==='default'?undefined:{exact:selected},echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false});
+   if(epoch!==generation){next.getTracks().forEach(t=>t.stop());return;}
+   try{ensureMixAudioGraph();await mixAudioContext.resume();setupMeters();}catch(e){next.getTracks().forEach(t=>t.stop());throw e;}
+   releaseInput();stream=next;source=mixAudioContext.createMediaStreamSource(stream);
+   inputGain=mixAudioContext.createGain();micAnalyser=mixAudioContext.createAnalyser();micAnalyser.fftSize=1024;
+   monitorGain=mixAudioContext.createGain();source.connect(inputGain);inputGain.connect(micAnalyser);inputGain.connect(monitorGain);
+   monitorGain.connect(stemGainNodes.microphone);gain();monitorState();
+   stream.getAudioTracks()[0].addEventListener('ended',()=>{if(stream===next){releaseInput();say('Input disconnected. Select another microphone.',true);}});
+   try{localStorage.setItem('mynus_microphone_device',selected);}catch(_){}
+   await devices();enable.textContent='Disable';monitor.disabled=false;
+   say(stream.getAudioTracks()[0].label||'Input enabled');
+  }catch(e){say(e.name+': '+e.message,true);}finally{busy=false;enable.disabled=false;}
+ }
+ function releaseInput(){
+  if(recorder?.state==='recording')recorder.stop();
+  const old=stream;stream=null;old?.getTracks().forEach(t=>t.stop());
+  [source,inputGain,monitorGain,micAnalyser].forEach(n=>{try{n?.disconnect();}catch(_){}});
+  source=inputGain=monitorGain=micAnalyser=null;monitoring=false;
+  enable.textContent='Enable';monitor.disabled=true;monitorState();
+ }
+ enable.onclick=()=>{if(stream){releaseInput();say('Microphone is off');}else turnOn();};
+ device.onchange=()=>{if(recorder?.state==='recording'){say('Stop recording before changing input.',true);return;}if(stream)turnOn();};
+ monitor.onclick=()=>{monitoring=!monitoring;monitorState();};
+ lyricsFullScreenMicRange?.addEventListener('input',gain);
+ $('micCreate770').onclick=()=>{
+  created=true;$('microphoneTrackRow').style.display='grid';$('fxTargetMicrophoneBtn').disabled=false;
+  $('micCreate770').disabled=true;monitorState();drawAllWaveforms();ensureProjectTrimTrackOverlays();say('Track created');
+ };
+ $('micRecord770').onclick=async()=>{
+  if(recorder?.state==='recording')return;
+  if(!(duration>0)){say('Open a track or project before recording.',true);return;}
+  if(!stream)await turnOn();if(!stream)return;
+  try{
+   const destination=mixAudioContext.createMediaStreamDestination();inputGain.connect(destination);
+   const connectedInput=inputGain,epoch=generation,chunks=[],startTime=getCurrentTime();
+   const active=new MediaRecorder(destination.stream);recorder=active;
+   $('micRecord770').disabled=true;$('micStopRecord770').disabled=false;
+   active.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
+   active.onstop=async()=>{
+    try{
+     try{connectedInput.disconnect(destination);}catch(_){}destination.stream.getTracks().forEach(t=>t.stop());
+     const blob=new Blob(chunks,{type:active.mimeType});
+     if(!blob.size||epoch!==generation)return;
+     const recorded=await mixAudioContext.decodeAudioData(await blob.arrayBuffer());
+     if(epoch!==generation)return;
+     const start=Math.round(startTime*recorded.sampleRate);
+     const length=Math.max(1,Math.min(Math.ceil(duration*recorded.sampleRate),start+recorded.length));
+     const aligned=mixAudioContext.createBuffer(recorded.numberOfChannels,length,recorded.sampleRate);
+     for(let ch=0;ch<recorded.numberOfChannels;ch++)if(start<length)aligned.getChannelData(ch).set(recorded.getChannelData(ch).subarray(0,length-start),start);
+     monitoring=false;monitorState();await installGeneratedTrack('microphone',aligned);
+     say('Recording ready. Save Project to keep it.');
+    }catch(e){say('Recording error: '+e.message,true);}finally{recorder=null;$('micRecord770').disabled=false;$('micStopRecord770').disabled=true;}
+   };
+   active.start();say('Recording...');
+  }catch(e){recorder=null;$('micRecord770').disabled=false;$('micStopRecord770').disabled=true;say(e.message,true);}
+ };
+ $('micStopRecord770').onclick=()=>{if(recorder?.state==='recording')recorder.stop();};
+ function reset(){generation++;releaseInput();created=false;$('microphoneTrackRow').style.display='none';$('fxTargetMicrophoneBtn').disabled=true;$('micCreate770').disabled=false;if(fxTarget==='microphone')setFxTarget('vocals');}
+ window.mynusMicrophone770={reset};
+ // Playback and project restore can construct the graph without enabling input.
+ const oldEnsure=ensureMixAudioGraph;
+ ensureMixAudioGraph=function(){oldEnsure();setupMeters();};
+ originalAudio.addEventListener('play',()=>{try{ensureMixAudioGraph();mixAudioContext.resume();}catch(e){console.error('Level meters:',e);}});
+ const oldInstall=installGeneratedTrack;
+ installGeneratedTrack=async function(id,buffer){await oldInstall(id,buffer);if(id==='microphone'){created=true;$('fxTargetMicrophoneBtn').disabled=false;$('micCreate770').disabled=true;}};
+ const oldLoad=loadWaveforms;
+ loadWaveforms=async function(...args){await oldLoad(...args);if(currentStemURLs.microphone){created=true;$('microphoneTrackRow').style.display='grid';$('fxTargetMicrophoneBtn').disabled=false;$('micCreate770').disabled=true;}};
+ let nextFrame=0;
+ function tick(now){
+  if(now-nextFrame>=50){
+   nextFrame=now;const values={L:-Infinity,R:-Infinity,Mic:-Infinity};
+   for(const [label,node] of Object.entries({...meters,Mic:micAnalyser})){
+    if(!node)continue;const data=new Float32Array(node.fftSize);node.getFloatTimeDomainData(data);
+    let peak=0;for(const v of data)peak=Math.max(peak,Math.abs(v));values[label]=peak>0?20*Math.log10(peak):-Infinity;
+   }
+   for(const meter of meterElements){
+    const db=values[meter.label],fill=Math.max(0,Math.min(1,(db+48)/54));
+    meter.cover.style.height=(100-fill*100)+'%';meter.number.textContent=Number.isFinite(db)?db.toFixed(1)+' dB':'−∞';
+    if(db>=meter.held||now>meter.until){meter.held=db;meter.until=now+900;}
+    meter.peak.style.bottom=(Math.max(0,Math.min(1,(meter.held+48)/54))*100)+'%';
+   }
+  }
+  requestAnimationFrame(tick);
+ }
+ requestAnimationFrame(tick);
+ navigator.mediaDevices?.addEventListener('devicechange',()=>devices().catch(e=>say(e.message,true)));
+ devices().then(()=>{try{const saved=localStorage.getItem('mynus_microphone_device');if([...device.options].some(o=>o.value===saved))device.value=saved;}catch(_){}}).catch(e=>say(e.message,true));
+ window.addEventListener('pagehide',releaseInput);
+})();
 </script></body>
 </html>
   
