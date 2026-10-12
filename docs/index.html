@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>Indicators Fix | 7.7.1 </title>
+  <title>Tokens&MicroRec | 7.8.0 </title>
 
 
  <style>
@@ -3542,6 +3542,19 @@ html.mynus-native-header #mnConsoleButton,html.mynus-native-header #mnLoginButto
 .fs-stereo780 .fs-meter770{position:static;left:auto;right:auto;bottom:auto}
 .fs-meter770 .meter-scale770{width:20px}
 @media(max-width:700px){.fs-meter770.mic{left:50px}.fs-stereo780{right:50px}.lyrics-fullscreen-side-control.left{left:12px}.lyrics-fullscreen-side-control.right{right:12px}}
+</style><style>
+.fx-column780{grid-column:2;grid-row:1;align-self:start;min-width:0}
+#fxStatus780{background:#fff;padding:6px 5px;color:#555;font-size:12px;overflow-wrap:anywhere}
+.master-title-row{gap:3px}
+.master-title-row>span:first-child{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis}
+.master-rec-commit-buttons{flex-shrink:0}
+.master-rec-commit-buttons button{font-size:9px;padding:2px 3px;white-space:nowrap}
+.fs-stereo780[hidden],.fs-meter770[hidden]{display:none!important}
+.result-preview780{border-top:1px solid #ddd;margin-top:12px;padding-top:10px}
+.result-preview780 audio{display:block;width:100%;margin:8px 0}
+.preview-words780{max-height:160px;overflow:auto;line-height:1.7}
+.preview-words780 .active{background:#222;color:#fff}
+#mnTokens780{font-size:12px;overflow-wrap:anywhere;max-height:200px;overflow:auto}
 </style></head>
 
 
@@ -4398,12 +4411,15 @@ html.mynus-native-header #mnConsoleButton,html.mynus-native-header #mnLoginButto
     ======================================== -->
 
     <div class="track generated-track" id="microphoneTrackRow">
-      <div class="track-controls">
-        <div class="track-title">Microphone <span class="track-tonic" data-track-tonic="microphone">—</span></div>
+      <div class="track-controls master-controls">
+        <div class="track-title master-title-row"><span>Microphone <span class="track-tonic" data-track-tonic="microphone">—</span></span><span class="master-rec-commit-buttons"><button id="micClear780">Clear Rec</button><button id="micSave780" disabled>Save Rec</button></span></div>
         <div class="track-buttons"><button id="microphoneMuteBtn">Mute</button><button id="microphoneSoloBtn">Solo</button></div>
+        <div class="track-buttons"><button id="micRecord770">Rec On</button><button id="micStopRecord770" disabled>Rec Off</button></div>
+        <div class="track-buttons"><button data-export-track="microphone" data-export-scope="full">Export Track</button><button data-export-track="microphone" data-export-scope="selection">Export Selection</button></div>
+        <div class="track-buttons"><button id="micUndo780" disabled>Undo Rec</button><button id="micRedo780" disabled>Redo Rec</button></div>
         <div class="volume-row"><input type="range" id="microphoneVolume" min="0" max="100" value="100"><span id="microphoneVolumeValue" class="volume-value">100%</span></div>
-        <div class="track-save-row"><button data-export-track="microphone" data-export-scope="full">Export Track</button><button data-export-track="microphone" data-export-scope="selection">Export Selection</button></div>
-        <div class="track-buttons"><button id="micClear780">Clear Rec</button><button id="micSave780" disabled>Save Rec</button></div><div class="track-buttons"><button id="micRecord770">Rec On</button><button id="micStopRecord770" disabled>Rec Off</button></div><div class="track-buttons"><button id="micUndo780" disabled>Undo Rec</button><button id="micRedo780" disabled>Redo Rec</button></div><div id="micState780" style="font-size:11px">No Records</div><div class="track-save-row crop-row"><button id="microphoneCropInBtn">Crop In</button><button id="microphoneCropOutBtn">Crop Out</button></div>
+        <div class="track-buttons"><button id="microphoneCropInBtn">Crop In</button><button id="microphoneCropOutBtn">Crop Out</button></div>
+        <div id="micState780" class="master-state">No Records</div>
       </div>
       <div class="timeline-scroll" data-track="microphone"><div class="timeline-inner" id="microphoneTimeline"><canvas id="microphoneCanvas"></canvas><div id="microphoneCropMaskLeft" class="crop-mask"></div><div id="microphoneCropMaskRight" class="crop-mask"></div><div class="playhead" id="microphonePlayhead"></div></div></div>
     </div>
@@ -4681,7 +4697,7 @@ html.mynus-native-header #mnConsoleButton,html.mynus-native-header #mnLoginButto
            MIX / MASTER EQ AND EFFECTS
       ======================================== -->
 
-      <aside class="fx-panel">
+      <div class="fx-column780"><aside class="fx-panel">
 
         <div class="fx-panel-title">
           EQ / Effects
@@ -5038,7 +5054,7 @@ html.mynus-native-header #mnConsoleButton,html.mynus-native-header #mnLoginButto
 <div class="mic-actions770"><button id="micEnable770">Microphone: Off</button><button id="micMonitor770" disabled>Monitor: Off</button></div>
 <button id="micCreate770" class="fx-create-button">Create New Track</button>
 <div class="meters770"><div data-meter770="L"></div><div data-meter770="Mic"></div><div data-meter770="R"></div></div>
-<small id="micMessage770">Microphone is off</small></section></aside>
+</section></aside><div id="fxStatus780"><small id="micMessage770">Microphone is off</small></div></div>
 
     </div>
 
@@ -5403,7 +5419,7 @@ const mynusNativeFetch=window.fetch.bind(window);
 const mynusAppOrigin=location.hostname==='mynus.local'||location.protocol==='file:';
 let mynusServerBase=(localStorage.getItem('mynusServerBase')||(mynusAppOrigin?'https://mynus.matmodelator.com':location.origin)).replace(/\/$/,'');
 let mynusSessionToken=sessionStorage.getItem('mynusSessionToken:'+mynusServerBase)||'';
-function isMynusServerPath(path){return /^\/(?:api\/|separate(?:$|\?)|progress\/|abort\/|results\/|debug\/)/.test(path);}
+function isMynusServerPath(path){return /^\/(?:api\/|separate(?:$|\?)|progress\/|abort\/|results\/|preview\/|debug\/)/.test(path);}
 function configureMynusServer(value){
  const url=new URL(value);if(!['https:','http:'].includes(url.protocol)||url.username||url.password||url.pathname!=='/'||url.search||url.hash)throw Error('Enter a server origin, for example https://mynus.matmodelator.com');
  mynusServerBase=url.origin;localStorage.setItem('mynusServerBase',mynusServerBase);
@@ -6595,6 +6611,7 @@ async function retainSeparatedTracksLocally(data, run) {
     localSeparatedTracks.set(id,track);
     data[id]=track.url;
   }
+  await acknowledgeResult780(data,run,downloads.map(item=>item.value));
 }
 
 
@@ -11188,7 +11205,7 @@ function createFxChain(
   }
 
   const panner =
-    mixAudioContext.createStereoPanner();
+    createPan780(mixAudioContext);
 
 
   const compressor =
@@ -13093,7 +13110,7 @@ function createExportFxChain(inputNode, audioContext) {
   }
 
   const panner =
-    audioContext.createStereoPanner();
+    createPan780(audioContext);
 
 
   const compressor =
@@ -23840,6 +23857,9 @@ document.addEventListener("click", event => {
       </section>
       <section id="mnPaymentsPanel" hidden aria-label="Payments">
         <p id="mnPaymentSummary">Loading payment details…</p>
+        <button type="button" id="mnConfirmToken780">Подтвердить оплату</button>
+        <button type="button" id="mnCheckToken780">Проверить токен</button>
+        <div id="mnTokens780" aria-live="polite"></div>
         <button id="mnChangePlan" type="button">Change plan</button>
         <button id="mnManageSubscription" type="button">Manage subscription</button>
         <p id="mnPaymentNotice" class="mnAccountStatus" role="status" aria-live="polite"></p>
@@ -25467,14 +25487,15 @@ async function waitForPaidResult760(data,run){
  sessionStorage.setItem('mynusPendingResult760',JSON.stringify({job_id:run.jobId,separation_id:data.separation_id,source:currentSourceAudioName}));
  const box=document.createElement('section');box.className='result-access760';box.setAttribute('role','dialog');box.setAttribute('aria-label','Separation result access');
  const title=document.createElement('strong');title.textContent='Separation #'+data.separation_id+' is ready';
- const info=document.createElement('p');info.textContent='Download requires payment for this separation or an active plan. File cleanup eligibility: '+(data.delete_after||'24 hours after completion')+'. Cleanup runs daily at server midnight.';
+ const info=document.createElement('p');info.textContent='Full result requires an active Subscription or OneTime token. File cleanup eligibility: '+(data.delete_after||'24 hours after completion')+'. Cleanup runs daily at server midnight.';
  const check=document.createElement('button');check.type='button';check.textContent='Check access';
  const account=document.createElement('button');account.type='button';account.textContent='Account / Payments';
  const close=document.createElement('button');close.type='button';close.textContent='Close';
  const message=document.createElement('p');box.append(title,info,message,check,account,close);document.body.appendChild(box);
+ const cleanupPreview=await mountPreview780(box,run.jobId);
  account.onclick=()=>document.getElementById('mnLoginButton').click();
  await new Promise((resolve,reject)=>{
-  const done=(error)=>{window.removeEventListener('mynus-session-change',change);box.remove();if(error)reject(error);else resolve();};
+  const done=(error)=>{cleanupPreview();window.removeEventListener('mynus-session-change',change);box.remove();if(error)reject(error);else resolve();};
   const change=event=>{if(!event.detail.authenticated)done(new DOMException('Signed out. Result remains on the server.','AbortError'));};
   window.addEventListener('mynus-session-change',change);
   close.onclick=()=>done(new DOMException('Result remains on the server until cleanup.','AbortError'));
@@ -25485,7 +25506,7 @@ async function waitForPaidResult760(data,run){
     if(!response.ok)throw new Error(response.mynusFailureMessage||'Result error ('+response.status+').');
     const fresh=await response.json();
     if(fresh.download_allowed){Object.assign(data,fresh);sessionStorage.removeItem('mynusPendingResult760');done();}
-    else message.textContent='No confirmed payment or active plan found. Payment processing must be connected on the server.';
+    else message.textContent='No active token is available for this separation. Check the assigned status and token in Payments.';
    }catch(error){message.textContent=error.message;}finally{check.disabled=false;}
   };
  });
@@ -25609,6 +25630,118 @@ document.getElementById('micSave780').onclick=()=>saveRec780('microphone');
 document.getElementById('micUndo780').onclick=()=>historyRec780(false);
 document.getElementById('micRedo780').onclick=()=>historyRec780(true);
 updateRecControls780();
+</script><script>// Explicit stereo pan matrix used by live playback and WAV export.
+function createPan780(context){
+ const input=context.createGain(),split=context.createChannelSplitter(2),merge=context.createChannelMerger(2);
+ input.channelCount=2;input.channelCountMode='explicit';input.channelInterpretation='speakers';
+ const ll=context.createGain(),lr=context.createGain(),rl=context.createGain(),rr=context.createGain();
+ input.connect(split);split.connect(ll,0);split.connect(lr,0);split.connect(rl,1);split.connect(rr,1);
+ ll.connect(merge,0,0);rl.connect(merge,0,0);lr.connect(merge,0,1);rr.connect(merge,0,1);
+ let current=0;
+ function set(value,time=context.currentTime){
+  current=Math.max(-1,Math.min(1,Number(value)||0));
+  const gains=current<0?[1,0,Math.cos((current+1)*Math.PI/2),Math.sin((current+1)*Math.PI/2)]:[Math.cos(current*Math.PI/2),Math.sin(current*Math.PI/2),0,1];
+  [ll,lr,rl,rr].forEach((node,i)=>node.gain.setValueAtTime(gains[i],time));
+ }
+ Object.defineProperty(input,'pan',{value:{get value(){return current},set value(v){set(v)},setValueAtTime(v,t){set(v,t);return this}}});
+ input.connect=(...args)=>merge.connect(...args);input.disconnect=(...args)=>merge.disconnect(...args);set(0);
+ return input;
+}
+
+// Align actual scale rectangles, including fonts, container sizing and borders.
+function alignFullScreenMeters780(){
+ const view=document.getElementById('lyricsFullScreenView');if(!view)return;
+ const frame=view.getBoundingClientRect();
+ const mic=document.querySelector('.fs-meter770.mic'),stereo=document.querySelector('.fs-stereo780');
+ for(const [scale,group] of [[lyricsFullScreenMicScale,mic],[lyricsFullScreenVolumeScale,stereo]]){
+  if(!scale||!group)continue;
+  group.hidden=scale.hidden;
+  if(scale.hidden)continue;
+  const range=scale.querySelector('input'),bar=group.querySelector('.meter-scale770');if(!range||!bar)continue;
+  const target=range.getBoundingClientRect(),rect=group.getBoundingClientRect(),barRect=bar.getBoundingClientRect();
+  group.style.bottom=Math.max(0,frame.bottom-target.bottom+(rect.bottom-barRect.bottom))+'px';
+ }
+}
+document.addEventListener('DOMContentLoaded',()=>{});
+(() => {
+ const mic=document.querySelector('.fs-meter770.mic'),stereo=document.querySelector('.fs-stereo780');
+ if(!mic||!stereo)return;
+ const observer=new MutationObserver(()=>requestAnimationFrame(alignFullScreenMeters780));
+ for(const scale of [lyricsFullScreenMicScale,lyricsFullScreenVolumeScale])observer.observe(scale,{attributes:true,attributeFilter:['hidden','style']});
+ new ResizeObserver(()=>requestAnimationFrame(alignFullScreenMeters780)).observe(document.getElementById('lyricsFullScreenView'));
+ [lyricsFullScreenMicBtn,lyricsFullScreenVolumeBtn].forEach((button,i)=>button?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();toggleLyricsFullScreenScale(i===0?lyricsFullScreenMicScale:lyricsFullScreenVolumeScale);alignFullScreenMeters780();}));
+ alignFullScreenMeters780();
+})();
+
+async function refreshTokens780(){
+ const host=document.getElementById('mnTokens780');if(!host)return;
+ const response=await mynusFetch('/api/account/tokens',{cache:'no-store'});const data=await response.json();
+ if(!response.ok)throw Error(data.error||'Не удалось проверить токен');
+ host.replaceChildren();
+ const summary=document.getElementById('mnPaymentSummary');
+ if(summary)summary.textContent=summary.textContent.replace(/Status: [^·]+/,'Status: '+(data.access_status||'No access')+' ');
+ if(!data.tokens.length){host.textContent='Токен ещё не выдан.';return;}
+ for(const token of data.tokens){const p=document.createElement('p');p.textContent='№ '+token.token_id+' · '+token.token+' · Тип: '+token.type+' · Статус: '+token.status+(token.separation_id?' · Сепарация № '+token.separation_id:'');host.append(p);}
+}
+(() => {
+ const confirm=document.getElementById('mnConfirmToken780'),check=document.getElementById('mnCheckToken780');
+ confirm.onclick=async()=>{
+  confirm.disabled=true;
+  try{const response=await mynusFetch('/api/account/tokens/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});const data=await response.json();if(!response.ok)throw Error(data.error||'Ошибка подтверждения');await refreshTokens780();console.info('Тестовое подтверждение: токен № '+data.token.token_id+' · '+data.token.type+' · '+data.token.status);}
+  catch(e){document.getElementById('mnTokens780').textContent=e.message;}finally{confirm.disabled=false;}
+ };
+ check.onclick=()=>refreshTokens780().catch(e=>document.getElementById('mnTokens780').textContent=e.message);
+ document.getElementById('mnOpenPayments').addEventListener('click',()=>check.onclick());
+ window.addEventListener('mynus-result-received780',()=>refreshTokens780().catch(()=>{}));
+})();
+
+async function acknowledgeResult780(data,run,files){
+ if(!data.access_token_id)return;
+ const receipt={job_id:run.jobId,token_id:data.access_token_id,files:files.map(f=>({name:f.id+'.mp3',size:f.blob.size}))};
+ sessionStorage.setItem('mynusReceipt780',JSON.stringify(receipt));
+ await retryReceipt780(receipt);
+}
+async function retryReceipt780(receipt){
+ for(let attempt=0;attempt<3;attempt++){
+  try{
+   const response=await mynusFetch('/api/separations/'+encodeURIComponent(receipt.job_id)+'/received',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(receipt)});
+   const data=await response.json();if(!response.ok)throw Error(data.error||'Receipt confirmation failed');
+   sessionStorage.removeItem('mynusReceipt780');console.info('Result received · token № '+data.token.token_id+' · '+data.token.type+' · '+data.token.status);
+   window.dispatchEvent(new Event('mynus-result-received780'));return;
+  }catch(error){if(attempt===2){console.error('Files are local. Receipt confirmation is pending: '+error.message);return;}await new Promise(resolve=>setTimeout(resolve,500));}
+ }
+}
+window.addEventListener('mynus-session-change',event=>{if(event.detail.authenticated){try{const receipt=JSON.parse(sessionStorage.getItem('mynusReceipt780')||'null');if(receipt)retryReceipt780(receipt);}catch(_){}}});
+
+async function mountPreview780(box,jobId){
+ const area=document.createElement('section');area.className='result-preview780';box.append(area);
+ const open=document.createElement('button');open.type='button';open.textContent='Прослушать превью';area.append(open);
+ let audio=null,urls=[],controller=null;
+ const cleanup=()=>{controller?.abort();audio?.pause();for(const url of urls)URL.revokeObjectURL(url);urls=[];};
+ open.onclick=async()=>{
+  open.disabled=true;controller=new AbortController();
+  try{
+   const response=await mynusFetch('/api/separations/'+encodeURIComponent(jobId)+'/preview',{signal:controller.signal});
+   const data=await response.json();if(!response.ok)throw Error(data.error||'Preview unavailable');
+   const options=document.createElement('select');options.setAttribute('aria-label','Preview version');
+   for(const [name,label] of [['original','Оригинал'],['vocals','Вокал'],['minus','Минус']])options.add(new Option(label,name));
+   audio=document.createElement('audio');audio.controls=true;audio.preload='metadata';
+   const words=document.createElement('div');words.className='preview-words780';
+   for(const word of data.words){const span=document.createElement('span');span.textContent=word.word+' ';span.dataset.start=word.start;span.dataset.end=word.end;words.append(span);}
+   const cache=new Map();let selection=0;
+   async function select(){
+    const chosen=options.value,ticket=++selection,time=audio.currentTime||0,playing=!audio.paused;audio.pause();
+    if(!cache.has(chosen)){const r=await mynusFetch(data.audio[chosen],{signal:controller.signal});if(!r.ok)throw Error('Preview audio unavailable ('+r.status+')');const url=URL.createObjectURL(await r.blob());urls.push(url);cache.set(chosen,url);}
+    if(ticket!==selection||!box.isConnected)return;
+    audio.src=cache.get(chosen);audio.onloadedmetadata=()=>{audio.currentTime=Math.min(time,data.duration);if(playing)audio.play().catch(()=>{});};
+   }
+   options.onchange=()=>select().catch(e=>console.error(e));
+   audio.ontimeupdate=()=>{for(const word of words.children)word.classList.toggle('active',audio.currentTime>=Number(word.dataset.start)&&audio.currentTime<Number(word.dataset.end));};
+   area.replaceChildren(options,audio,words);await select();
+  }catch(error){if(error.name!=='AbortError'){area.replaceChildren(open);open.disabled=false;const p=document.createElement('p');p.textContent=error.message;area.append(p);}}
+ };
+ return cleanup;
+}
 </script></body>
 </html>
   
