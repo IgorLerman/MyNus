@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>Tokens&MicroRec | 7.8.0 </title>
+  <title>Fix Microphone Track | 7.8.1 </title>
 
 
  <style>
@@ -3444,7 +3444,7 @@ window.addEventListener('keydown',event=>{
    if(message.error)request.reject(new Error(message.error));else request.resolve(message.result);
  });
  function request(action,data={}) {
-   if(!available())return Promise.reject(new Error('Update MyNus.exe to 7.8.0 to use the project folder.'));
+   if(!available())return Promise.reject(new Error('Update MyNus.exe to 7.8.1 to use the project folder.'));
    const id=crypto.randomUUID();
    return new Promise((resolve,reject)=>{
      const timer=setTimeout(()=>{pending.delete(id);reject(new Error('Desktop file operation timed out.'));},1800000);
@@ -3480,7 +3480,7 @@ window.addEventListener('keydown',event=>{
 
 </script>
 <style>
-/* 7.8.0 compact track headings and desktop header */
+/* 7.8.1 compact track headings and desktop header */
 .track-controls{grid-template-columns:max-content minmax(0,1fr)!important;}
 .track-title{white-space:nowrap;display:flex;align-items:center;gap:4px;}
 .track-title .track-tonic{display:inline!important;margin:0!important;}
@@ -3555,6 +3555,14 @@ html.mynus-native-header #mnConsoleButton,html.mynus-native-header #mnLoginButto
 .preview-words780{max-height:160px;overflow:auto;line-height:1.7}
 .preview-words780 .active{background:#222;color:#fff}
 #mnTokens780{font-size:12px;overflow-wrap:anywhere;max-height:200px;overflow:auto}
+</style><style>
+.rec-shared781{min-height:0!important;margin:3px 0 5px;align-items:start!important}
+.rec-history781{padding:5px 6px;min-width:0;background:#f5f5f5;border-radius:8px}
+.rec-history-title781{text-align:center;font-size:10px;color:#555;margin-bottom:3px}
+.rec-history-buttons781{display:flex;gap:4px}
+.rec-history-buttons781 button{flex:1;min-width:0;height:20px;padding:2px 3px;font-size:10px;white-space:nowrap}
+.rec-history781 .master-state{margin:5px 0 0;font-size:11px;min-height:14px;overflow-wrap:anywhere}
+.track.generated-track .master-controls{align-self:start;flex:0 0 auto}
 </style></head>
 
 
@@ -4416,10 +4424,8 @@ html.mynus-native-header #mnConsoleButton,html.mynus-native-header #mnLoginButto
         <div class="track-buttons"><button id="microphoneMuteBtn">Mute</button><button id="microphoneSoloBtn">Solo</button></div>
         <div class="track-buttons"><button id="micRecord770">Rec On</button><button id="micStopRecord770" disabled>Rec Off</button></div>
         <div class="track-buttons"><button data-export-track="microphone" data-export-scope="full">Export Track</button><button data-export-track="microphone" data-export-scope="selection">Export Selection</button></div>
-        <div class="track-buttons"><button id="micUndo780" disabled>Undo Rec</button><button id="micRedo780" disabled>Redo Rec</button></div>
         <div class="volume-row"><input type="range" id="microphoneVolume" min="0" max="100" value="100"><span id="microphoneVolumeValue" class="volume-value">100%</span></div>
         <div class="track-buttons"><button id="microphoneCropInBtn">Crop In</button><button id="microphoneCropOutBtn">Crop Out</button></div>
-        <div id="micState780" class="master-state">No Records</div>
       </div>
       <div class="timeline-scroll" data-track="microphone"><div class="timeline-inner" id="microphoneTimeline"><canvas id="microphoneCanvas"></canvas><div id="microphoneCropMaskLeft" class="crop-mask"></div><div id="microphoneCropMaskRight" class="crop-mask"></div><div class="playhead" id="microphonePlayhead"></div></div></div>
     </div>
@@ -4444,11 +4450,6 @@ html.mynus-native-header #mnConsoleButton,html.mynus-native-header #mnLoginButto
         <div class="track-buttons">
           <button id="saveAsMasterBtn" disabled>Export Track</button>
           <button id="saveMasterSelectionBtn" disabled>Export Selection</button>
-        </div>
-
-        <div class="track-buttons">
-          <button id="undoMasterBtn" disabled>Undo Rec</button>
-          <button id="redoMasterBtn" disabled>Redo Rec</button>
         </div>
 
         <div class="volume-row">
@@ -4501,6 +4502,13 @@ html.mynus-native-header #mnConsoleButton,html.mynus-native-header #mnLoginButto
 
 
 
+    <div class="track rec-shared781">
+      <div class="rec-history781">
+        <div class="rec-history-title781">History</div>
+        <div class="rec-history-buttons781"><button id="undoMasterBtn" disabled>Undo Rec</button><button id="redoMasterBtn" disabled>Redo Rec</button></div>
+        <div id="masterState" class="master-state" role="status" aria-live="polite">No Records</div>
+      </div>
+    </div>
     <!-- ========================================
          LYRICS TRACK
     ======================================== -->
@@ -4534,7 +4542,7 @@ html.mynus-native-header #mnConsoleButton,html.mynus-native-header #mnLoginButto
          MASTER TIMELINE
     ======================================== -->
 
-    <div class="master-timeline-heading"><div id="masterState" class="master-state">Empty</div><div class="master-timeline-title">Master Timeline</div></div>
+    <div class="master-timeline-heading"><div class="master-timeline-title">Master Timeline</div></div>
 
     <div class="master-timeline-row">
 
@@ -5620,24 +5628,7 @@ const masterState =
   document.getElementById("masterState");
 
 
-function setMasterState(text) {
-
-  masterState.textContent =
-    text;
-
-  const colors = {
-    "No Records": "#2196F3",
-    "Rec armed — pre-roll": "#FFD600",
-    "Recording...": "#800020",
-    "Master recording error": "#FF0000",
-    "Recorded — not saved": "#FFD600",
-    "Saved successfully": "#00C853",
-    "Recover by History": "#00C853"
-  };
-
-  masterState.style.color =
-    colors[text] || "";
-}
+function setMasterState(text){setRecState781('Master',text);}
 
 
 const fragmentStartBtn =
@@ -8163,7 +8154,12 @@ function drawWaveform(
   audioBuffer
 ) {
 
+  const canvasWidth781=getTimelineWidth();
+  timeline.style.width=canvasWidth781+'px';
+  canvas.width=canvasWidth781;canvas.height=90;
+  canvas.style.width=canvasWidth781+'px';canvas.style.height='90px';
   if (!audioBuffer) {
+    canvas.getContext("2d").clearRect(0,0,canvas.width,canvas.height);
 
     if (
       canvas === canvases.master
@@ -10908,7 +10904,7 @@ function ensureMixAudioGraph() {
   masterRecordProcessor.onaudioprocess =
     event => {
 
-      if (!masterRecording || rec780.target!=="master") {
+      if (!masterRecording || rec780.target!=="master" || !isPlaying) {
         return;
       }
 
@@ -11781,7 +11777,7 @@ function beginMasterCaptureAt(startTime) {
  masterRecordArmed=false;masterRecordTimelineStart=Number(startTime);masterRecordTimelineEnd=Number(startTime);
  rec780.before=snapshotRec780(rec780.target);
  if(rec780.target==='master'){waveformData.master=null;masterBlob=null;clearMasterCanvas();}
- masterLivePeaks=[];masterPcmChunks=[];masterPcmSampleRate=mixAudioContext.sampleRate;
+ rec780.paintBase=null;masterLivePeaks=[];masterPcmChunks=[];masterPcmSampleRate=mixAudioContext.sampleRate;
  masterPcmChannels=2;masterPcmFrameCount=0;masterRecording=true;masterRecordStartTime=performance.now();
  setRecordingState780('Recording...');updateRecControls780();startMasterWaveformCapture();
 }
@@ -11798,15 +11794,73 @@ function stopMasterRecording(){
 // Работа с Master/Mix и итоговым аудиосостоянием.
 // One transport/capture controller and one REC undo/redo history for both tracks.
 let micCapture780=null,micCaptureInput780=null,micSilent780=null;
-function micState780(text){const el=document.getElementById('micState780');if(el){el.textContent=text;el.style.color=text==='Recording...'?'#800020':text==='Saved successfully'?'#00a050':'#2196f3';}}
+function setRecState781(track,text){
+ const state=document.getElementById('masterState');if(!state)return;
+ state.textContent=track+' — '+text;
+ const colours={'No Records':'#2196F3','Rec armed — pre-roll':'#FFD600','Recording...':'#800020','Recording error':'#FF0000','Master recording error':'#FF0000','Recorded — not saved':'#FFD600','Saved successfully':'#00C853','Recover by History':'#00C853'};
+ state.style.color=colours[text]||'#666';
+}
+
+function captureMicPcm781(event){
+ if(!masterRecording||rec780.target!=='microphone'||!isPlaying)return;
+ const input=event.inputBuffer;
+ const elapsed=Math.max(0,getCurrentTime()-masterRecordTimelineStart);
+ const available=Math.max(0,Math.floor(elapsed*masterPcmSampleRate)-masterPcmFrameCount);
+ const frames=Math.min(input.length,available);if(!frames)return;
+ const before=masterPcmFrameCount,chunk=[];let peak=0;
+ for(let ch=0;ch<2;ch++){
+  const samples=new Float32Array(input.getChannelData(Math.min(ch,input.numberOfChannels-1)).subarray(input.length-frames));
+  chunk.push(samples);for(const sample of samples)peak=Math.max(peak,Math.abs(sample));
+ }
+ masterPcmChunks.push(chunk);masterPcmFrameCount+=frames;
+ masterLivePeaks.push({start:masterRecordTimelineStart+before/masterPcmSampleRate,end:masterRecordTimelineStart+masterPcmFrameCount/masterPcmSampleRate,peak:Math.min(1,peak)});
+}
+
+function drawLiveMicrophone781(){
+ const canvas=canvases.microphone;if(!canvas)return;
+ const width=getTimelineWidth(),height=90;
+ let saved=rec780.paintBase;
+ if(!saved||saved.width!==width||saved.buffer!==waveformData.microphone){
+  drawWaveform(canvas,timelines.microphone,waveformData.microphone);
+  const image=document.createElement('canvas');image.width=width;image.height=height;
+  image.getContext('2d').drawImage(canvas,0,0);
+  saved=rec780.paintBase={width,buffer:waveformData.microphone,image};
+ }
+ const context=canvas.getContext('2d');context.clearRect(0,0,width,height);context.drawImage(saved.image,0,0);
+ const recordedEnd=masterRecordTimelineStart+masterPcmFrameCount/masterPcmSampleRate;
+ const end=Math.min(getCurrentTime(),recordedEnd);
+ const left=Math.max(0,masterRecordTimelineStart*pixelsPerSecond),right=Math.min(width,end*pixelsPerSecond);
+ if(right<=left)return;
+ context.save();context.beginPath();context.rect(left,0,right-left,height);context.clip();
+ context.clearRect(left,0,right-left,height);context.strokeStyle='#777';context.lineWidth=1;context.beginPath();
+ for(const item of masterLivePeaks){
+  if(item.start>=end)break;
+  const a=Math.max(left,item.start*pixelsPerSecond),b=Math.min(right,item.end*pixelsPerSecond),middle=height/2;
+  for(let x=a;x<b;x+=1){context.moveTo(x,middle-item.peak*middle);context.lineTo(x,middle+item.peak*middle);}
+ }
+ context.stroke();context.restore();
+}
+
+async function resumeMicPlayback781(){
+ microphoneAudio.muted=false;applyMix();applyFxSettings('microphone');
+ if(isKaraokeUiMode())applyLyricsFullScreenTrackFxNodes();
+ if(!isPlaying||mode!=='mix'||!stemTrackIsAvailable('microphone'))return;
+ const time=getCurrentTime();
+ if(Number.isFinite(microphoneAudio.duration)&&time<microphoneAudio.duration){
+  microphoneAudio.currentTime=Math.max(0,time);
+  await microphoneAudio.play();
+ }
+}
+
+function micState780(text){setRecState781('Microphone',text);}
 function setRecordingState780(text){if(rec780.target==='microphone')micState780(text);else setMasterState(text);}
 function updateRecControls780(){
  const locked=masterRecording||masterRecordArmed||rec780.busy;
  undoMasterBtn.disabled=redoMasterBtn.disabled=locked;
  if(!locked){undoMasterBtn.disabled=!rec780.undo.length;redoMasterBtn.disabled=!rec780.redo.length;}
  const $=id=>document.getElementById(id);
- if($('micUndo780'))$('micUndo780').disabled=undoMasterBtn.disabled;
- if($('micRedo780'))$('micRedo780').disabled=redoMasterBtn.disabled;
+
+
  recordMasterBtn.disabled=locked;stopMasterBtn.disabled=!(masterRecording||masterRecordArmed)&&!rec780.busy;
  if($('micRecord770'))$('micRecord770').disabled=locked;
  if($('micStopRecord770'))$('micStopRecord770').disabled=!(masterRecording||masterRecordArmed)||rec780.target!=='microphone';
@@ -11842,12 +11896,7 @@ async function startMasterRecording(target='master'){
    micCaptureInput780=window.mynusMicrophone770.input();
    micCapture780=mixAudioContext.createScriptProcessor(2048,2,2);micSilent780=mixAudioContext.createGain();micSilent780.gain.value=0;
    micCaptureInput780.connect(micCapture780);micCapture780.connect(micSilent780);micSilent780.connect(mixAudioContext.destination);
-   micCapture780.onaudioprocess=e=>{
-    if(!masterRecording||rec780.target!=='microphone')return;
-    const b=e.inputBuffer,chunk=[];let peak=0;
-    for(let c=0;c<2;c++){const samples=new Float32Array(b.getChannelData(Math.min(c,b.numberOfChannels-1)));chunk.push(samples);for(const value of samples)peak=Math.max(peak,Math.abs(value));}
-    masterPcmChunks.push(chunk);masterPcmFrameCount+=b.length;masterLivePeaks.push(Math.min(1,peak));
-   };
+   micCapture780.onaudioprocess=captureMicPcm781;
   }
   await startMasterRecordingLegacy780();updateRecControls780();
  }catch(e){masterRecording=false;masterRecordArmed=false;disconnectMicCapture780();microphoneAudio.muted=false;setRecordingState780('Recording error');console.error(e);updateRecControls780();}
@@ -11889,6 +11938,7 @@ async function rebuildMic780(){
   }
  }
  await installGeneratedTrack('microphone',full);
+ await resumeMicPlayback781();
 }
 async function finishMasterRecording(){
  const target=rec780.target,epoch=rec780.epoch,start=masterRecordTimelineStart;
@@ -11905,7 +11955,7 @@ async function finishMasterRecording(){
   if(epoch!==rec780.epoch)return;
   setRecordingState780('Recorded — not saved');status.textContent=(target==='master'?'Master':'Microphone')+' recording complete';status.className='progress-status success';
  }catch(e){setRecordingState780('Recording error');status.textContent='Recording error: '+e.message;status.className='progress-status error';console.error(e);}
- finally{if(epoch===rec780.epoch){microphoneAudio.muted=false;rec780.busy=false;updateRecControls780();}}
+ finally{if(epoch===rec780.epoch){microphoneAudio.muted=false;rec780.busy=false;applyMix();updateRecControls780();}}
 }
 async function restoreRec780(entry){
  if(entry.track==='master'){masterSegments=cloneMasterSegments(entry.segments);savedMasterBlob=entry.saved;await restoreMasterFromSegments();if(entry.savedCurrent)savedMasterBlob=masterBlob;}
@@ -11977,6 +12027,7 @@ function drawMasterCompositeWaveform() {
 
   if (
     masterRecording
+    && rec780.target==='master'
     &&
     masterLivePeaks.length > 0
   ) {
@@ -12648,13 +12699,7 @@ function stopMasterWaveformCapture() {
 
 
 // Построение и обновление формы аудиосигнала.
-function drawLiveMasterWaveform(){
- if(rec780.target==='master'){drawMasterCompositeWaveform();return;}
- const canvas=canvases.microphone;if(!canvas)return;
- const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);
- ctx.strokeStyle='#777';ctx.beginPath();const middle=canvas.height/2;
- masterLivePeaks.forEach((peak,i)=>{const x=(masterRecordTimelineStart+i*2048/masterPcmSampleRate)*pixelsPerSecond;ctx.moveTo(x,middle-peak*middle);ctx.lineTo(x,middle+peak*middle);});ctx.stroke();
-}
+function drawLiveMasterWaveform(){if(rec780.target==='master')drawMasterCompositeWaveform();else drawLiveMicrophone781();}
 
 
 
@@ -21462,7 +21507,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "7.8.0",
+    version: "7.8.1",
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
     current_tonic: currentTrackTonic(),
@@ -22368,7 +22413,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "7.8.0";
+const MYNUS_CLIENT_VERSION = "7.8.1";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -25433,7 +25478,7 @@ for(const id of ['lyricsUndoBtn','lyricsRedoBtn'])document.getElementById(id).ad
  document.addEventListener('pointerdown',e=>{if(!popup.contains(e.target)&&!e.target.closest('.track-tonic'))popup.hidden=true;});
  document.addEventListener('keydown',e=>{if(e.key==='Escape')popup.hidden=true;});
  // Mirror messages, rather than continually changing playback counters.
- for(const [id,name] of [['status','STATUS'],['masterState','MASTER'],['selectionInfo','TIMELINE'],['trackDurationInfo','TIMELINE'],['lyricsEditorStatus','LYRICS']]){
+ for(const [id,name] of [['status','STATUS'],['masterState','REC'],['selectionInfo','TIMELINE'],['trackDurationInfo','TIMELINE'],['lyricsEditorStatus','LYRICS']]){
   const element=document.getElementById(id);if(!element)continue;let previous=element.textContent.trim();
   const observer=new MutationObserver(()=>{const message=element.textContent.trim();if(!message||message===previous)return;previous=message;window.mynusLocalConsole.message(name,message,getComputedStyle(element).color);});
   observer.observe(element,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['style','class']});
@@ -25627,8 +25672,8 @@ async function waitForPaidResult760(data,run){
 </script><script>
 document.getElementById('micClear780').onclick=()=>clearRec780('microphone');
 document.getElementById('micSave780').onclick=()=>saveRec780('microphone');
-document.getElementById('micUndo780').onclick=()=>historyRec780(false);
-document.getElementById('micRedo780').onclick=()=>historyRec780(true);
+
+
 updateRecControls780();
 </script><script>// Explicit stereo pan matrix used by live playback and WAV export.
 function createPan780(context){
