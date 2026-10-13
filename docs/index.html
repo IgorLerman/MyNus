@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>Fix Save Master | 7.8.2 </title>
+  <title>AccessType | 7.8.3 </title>
 
 
  <style>
@@ -3455,8 +3455,8 @@ window.addEventListener('keydown',event=>{
  let choice=null;
  window.mynusNativeFiles={available,request,resetChoice(){choice=null;},
    async chooseSave(name){choice=await request('project-choose-save',{name:filename(name)});return choice;},
-   async save(blob,name){
-     const begin=await request('project-save-begin',{name:filename(name),size:blob.size,choice:choice?.token||''});choice=null;
+   async save(blob,name,path){
+     const begin=await request('project-save-begin',{name:filename(name),size:blob.size,choice:choice?.token||'',path:path||''});choice=null;
      if(begin.cancelled)throw new DOMException('Project saving cancelled.','AbortError');
      try {
        for(let offset=0;offset<blob.size;offset+=262144) {
@@ -5484,6 +5484,7 @@ async function mynusFetch(input,options={}){
  let response;
  try{
    response=await mynusNativeFetch(mynusServerBase+path,{...options,headers,signal,credentials:mynusServerBase===location.origin?'same-origin':'omit'});
+   window.dispatchEvent(new CustomEvent('mynus-server-availability',{detail:{reachable:true}}));
    if(!response.ok&&reportFailure){let data={};try{data=await response.clone().json();}catch(_){}response.mynusFailureMessage=showMynusRequestFailure(path,response.status,data.details||data.error||data.message||response.statusText);}
    if(epoch!==mynusAuthEpoch760&&!logout)throw new DOMException('Server session changed.','AbortError');
    if(response.status===401&&!authPath&&!logout&&!explicitAccount&&!mynusLoggedOut760)detachServer760();
@@ -5495,6 +5496,7 @@ async function mynusFetch(input,options={}){
    if(response.status===401&&explicitAccount&&!mynusLoggedOut760)detachServer760();
    return response;
  }catch(error){
+   if(error.name!=='AbortError')window.dispatchEvent(new CustomEvent('mynus-server-availability',{detail:{reachable:false}}));
    if(reportFailure&&error.name!=='AbortError'&&!error.mynusReported){error.message=showMynusRequestFailure(path,'NETWORK');error.mynusReported=true;error.httpStatus='NETWORK';}
    throw error;
  }finally{mynusRequests760.delete(controller);}
@@ -21855,7 +21857,7 @@ async function saveCurrentProject(projectName, savePath, conflictAction = "", op
   const archive=await localWriteProjectArchive(entries);
   let savedPath='';
   if(window.mynusNativeFiles.available()) {
-    const saved=await window.mynusNativeFiles.save(archive,name);savedPath=saved.path;
+    const saved=await window.mynusNativeFiles.save(archive,name,savePath);savedPath=saved.path;
   } else if(localProjectSaveHandle){
     const writable=await localProjectSaveHandle.createWritable();
     try{await writable.write(archive);await writable.close();}catch(error){await writable.abort().catch(()=>{});throw error;}
@@ -22988,7 +22990,7 @@ saveProjectBtn?.addEventListener("click", async () => {
 
   if(window.mynusNativeFiles.available()) {
     window.mynusNativeFiles.resetChoice();
-    try {const location=await window.mynusNativeFiles.request('project-location');saveProjectPathInput.value=location.folder;}
+    try {const location=await window.mynusNativeFiles.request('project-location');saveProjectPathInput.value=location.path||location.folder;}
     catch(error){console.error(error);return;}
   } else if(saveProjectPathInput&&!saveProjectPathInput.value.trim())saveProjectPathInput.value='Browser downloads';
 
@@ -24160,14 +24162,14 @@ document.addEventListener("click", event => {
     try {
       await api(registration ? '/api/auth/register' : '/api/auth/login', {email:email.value, code:code.value});
       window.mynusLocalConsole.event('account-in','Account signed in: '+email.value.trim());
-      accountChecked=false;await checkAccountOnDemand();setBusy(false);dialog.close();
+      accountChecked=false;await checkAccountOnDemand();setBusy(false);showAccountMenu();openAccountDropdown();
     } catch (error) {message.textContent = error.message; setBusy(false);}
   };
   document.getElementById('mnLogout').onclick = async () => {
     if (busy) return;
     setBusy(true);
-    try {await api('/api/auth/logout', {}); resetAccount760();window.mynusLocalConsole.event('account-out','Account signed out.');dialog.close();}
-    catch (error) {message.textContent = error.message; setBusy(false);}
+    try {await api('/api/auth/logout', {}); resetAccount760();window.mynusLocalConsole.event('account-out','Account signed out.');openAuthDialog();email.focus();}
+    catch (error) {message.textContent = error.message; setBusy(false);openAuthDialog();email.focus();}
   };
   function showLocalAccountNotice() {
     message.textContent = 'Local mode. Account sign-in is available when MyNus is opened through the server. Projects work without signing in.';
@@ -25831,10 +25833,4 @@ function mixClock782(){
   for(const group of data.project?.sequencer?.playback_groups||['stems','effects','inputs'])if(['stems','effects','inputs'].includes(group))mixGroups782.add(group);
   return data;
  };
- const masterRow=timelines.master.closest('.track'),controls=masterRow.querySelector('.master-controls'),viewport=masterRow.querySelector('.timeline-scroll');
- new ResizeObserver(()=>{const height=controls.getBoundingClientRect().height;if(height>0)viewport.style.height=Math.ceil(height)+'px';}).observe(controls);
- refreshGroups782();
-})();
-</script></body>
-</html>
-  
+ const masterRow=timelines.master.cl
