@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>AccessType | 7.8.3 </title>
+  <title>AccessSwitch | 7.8.4 </title>
 
 
  <style>
@@ -5493,6 +5493,7 @@ async function mynusFetch(input,options={}){
      const token=response.headers.get('X-MyNus-Session');
      if(token){mynusSessionToken=token;mynusLoggedOut760=false;sessionStorage.setItem('mynusSessionToken:'+mynusServerBase,token);window.dispatchEvent(new CustomEvent('mynus-session-change',{detail:{authenticated:true}}));}
    }
+   if(response.ok&&explicitAccount){mynusLoggedOut760=false;window.dispatchEvent(new CustomEvent('mynus-session-change',{detail:{authenticated:true}}));}
    if(response.status===401&&explicitAccount&&!mynusLoggedOut760)detachServer760();
    return response;
  }catch(error){
@@ -6345,6 +6346,27 @@ let waveformData = {
 
 };
 
+
+function groupForTrack782(id){return id==='microphone'?'inputs':id==='pitchCorrection'||id==='harmonizer'?'effects':'stems';}
+function trackGroupEnabled782(id){return mixGroups782.has(groupForTrack782(id));}
+function refreshGroups782(){
+ for(const [id,group] of [['mixModeBtn','stems'],['effectsModeBtn','effects'],['inputsModeBtn','inputs']]){
+  const active=mode==='mix'&&mixGroups782.has(group);
+  document.getElementById(id)?.classList.toggle('active',active);
+  document.getElementById(id)?.setAttribute('aria-pressed',String(active));
+  document.querySelectorAll('[data-proxy="'+id+'"]').forEach(button=>{button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));});
+ }
+}
+function selectGroup782(group){
+ if(mode!=='mix'){mixGroups782.clear();mixGroups782.add(group);switchMode('mix');}
+ else if(mixGroups782.has(group))mixGroups782.delete(group);else mixGroups782.add(group);
+ applyMix();refreshGroups782();
+}
+function mixClock782(){
+ if(stemTrackIsAvailable('vocals'))return vocalsAudio;
+ for(const id of stemIds)if(stemTrackIsAvailable(id))return stemAudio[id];
+ return originalAudio;
+}
 
 const mixGroups782=new Set(['stems']);
 const stemIds = [
@@ -24189,6 +24211,7 @@ document.addEventListener("click", event => {
     mode(false);setBusy(false);
   }
   window.addEventListener('mynus-session-change',event=>{if(!event.detail.authenticated)resetAccount760();});
+  window.addEventListener('mynus-open-signin784',()=>{resetAccount760();openAuthDialog();email.focus();});
 
   let accountChecked = false;
   let accountCheckPromise = null;
@@ -25210,7 +25233,7 @@ async function restoreMynusSnapshot(saved) {
    const response=await mynusFetch('/debug/server-logs?after='+lastServerLogId,{signal:controller.signal});
    if(!response.ok)throw Error('Server logs ('+response.status+'): '+(response.status===401?'Sign in or register to continue.':'Connection failed.'));
    if(!response.headers.get('content-type')?.includes('text/event-stream'))throw Error('Server did not return a log stream.');
-   notice.textContent='Local + server logs';const reader=response.body.getReader(),decoder=new TextDecoder();let pending='';
+   window.dispatchEvent(new Event('mynus-mode-refresh784'));const reader=response.body.getReader(),decoder=new TextDecoder();let pending='';
    while(!controller.signal.aborted){const chunk=await reader.read();if(chunk.done)break;pending+=decoder.decode(chunk.value,{stream:true});let index;
     while((index=pending.indexOf('\n\n'))>=0){const packet=pending.slice(0,index);pending=pending.slice(index+2);const data=packet.split('\n').filter(line=>line.startsWith('data:')).map(line=>line.slice(5).trimStart()).join('\n');if(!data)continue;const record=JSON.parse(data);if(lastServerLogId!=='latest'&&record.id<=lastServerLogId)continue;lastServerLogId=record.id;window.mynusLocalConsole.appendServer(record);}
    }
@@ -25491,10 +25514,6 @@ for(const id of ['lyricsUndoBtn','lyricsRedoBtn'])document.getElementById(id).ad
  }
 })();
 </script><script>(()=>{
- const notice=document.getElementById('mnConsoleNotice');
- const address='Server '+mynusServerBase;
- const pinAddress=()=>{if(notice.textContent!==address)notice.textContent=address;};
- new MutationObserver(pinAddress).observe(notice,{childList:true,characterData:true,subtree:true});pinAddress();
  document.getElementById('dbTrack').addEventListener('input',()=>{
   if(!dbDialog.hidden&&dbSnapshot)document.getElementById('dbTitle').textContent='Check Lyrics вЂ” '+(document.getElementById('dbTrack').value.trim()||'Untitled')+' вЂ” '+dbTime(dbSnapshot.seconds);
  });
@@ -25793,27 +25812,7 @@ async function mountPreview780(box,jobId){
  };
  return cleanup;
 }
-</script><script>function groupForTrack782(id){return id==='microphone'?'inputs':id==='pitchCorrection'||id==='harmonizer'?'effects':'stems';}
-function trackGroupEnabled782(id){return mixGroups782.has(groupForTrack782(id));}
-function refreshGroups782(){
- for(const [id,group] of [['mixModeBtn','stems'],['effectsModeBtn','effects'],['inputsModeBtn','inputs']]){
-  const active=mode==='mix'&&mixGroups782.has(group);
-  document.getElementById(id)?.classList.toggle('active',active);
-  document.getElementById(id)?.setAttribute('aria-pressed',String(active));
-  document.querySelectorAll('[data-proxy="'+id+'"]').forEach(button=>{button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));});
- }
-}
-function selectGroup782(group){
- if(mode!=='mix'){mixGroups782.clear();mixGroups782.add(group);switchMode('mix');}
- else if(mixGroups782.has(group))mixGroups782.delete(group);else mixGroups782.add(group);
- applyMix();refreshGroups782();
-}
-function mixClock782(){
- if(stemTrackIsAvailable('vocals'))return vocalsAudio;
- for(const id of stemIds)if(stemTrackIsAvailable(id))return stemAudio[id];
- return originalAudio;
-}
-(() => {
+</script><script>(() => {
  for(const [id,group] of [['mixModeBtn','stems'],['effectsModeBtn','effects'],['inputsModeBtn','inputs']]){
   document.getElementById(id).addEventListener('click',event=>{event.stopImmediatePropagation();selectGroup782(group);},true);
  }
@@ -25833,4 +25832,63 @@ function mixClock782(){
   for(const group of data.project?.sequencer?.playback_groups||['stems','effects','inputs'])if(['stems','effects','inputs'].includes(group))mixGroups782.add(group);
   return data;
  };
- const masterRow=timelines.master.cl
+ const masterRow=timelines.master.closest('.track'),controls=masterRow.querySelector('.master-controls'),viewport=masterRow.querySelector('.timeline-scroll');
+ new ResizeObserver(()=>{const height=controls.getBoundingClientRect().height;if(height>0)viewport.style.height=Math.ceil(height)+'px';}).observe(controls);
+ refreshGroups782();
+})();
+
+</script>
+
+<script>
+(() => {
+ const local='MyNus · LocalMode · Offline capable · Local features enabled · Separation, server results, profile and payments disabled';
+ const server='MyNus · ServerMode · Online only · Signed in · Local and server features enabled · Full results require an access token';
+ const instruction='To enable ServerMode, connect to the Internet and sign up or sign in.';
+ let signedIn=false,reachable=false,lastMode=null;
+ const notice=document.getElementById('mnConsoleNotice');
+ function connected(){return signedIn&&reachable&&navigator.onLine!==false;}
+ function footer(){if(notice){const text=connected()?'Server '+mynusServerBase:'Out of server';if(notice.textContent!==text)notice.textContent=text;}}
+ function render(){
+  const mode=connected()?'ServerMode':'LocalMode';
+  footer();
+  if(mode===lastMode)return;
+  lastMode=mode;
+  document.title=mode==='ServerMode'?server:local+' · '+instruction;
+  console.info('Mode: '+mode+' · '+(mode==='ServerMode'?'Signed in · Server features enabled':'Local features enabled · Server features disabled'));
+  window.dispatchEvent(new CustomEvent('mynus-mode-change784',{detail:{mode}}));
+  if(window.mynusNativeFiles?.available())window.mynusNativeFiles.request('app-mode',{mode}).catch(error=>console.warn('Window mode label:',error.message));
+  const fallback=document.getElementById('mynusModeBar784');
+  if(fallback){fallback.firstChild.textContent=(mode==='ServerMode'?server:local);fallback.lastChild.hidden=mode==='ServerMode';}
+ }
+ window.addEventListener('mynus-session-change',event=>{signedIn=!!event.detail?.authenticated;if(signedIn)reachable=true;render();});
+ window.addEventListener('mynus-server-availability',event=>{reachable=!!event.detail?.reachable;render();});
+ window.addEventListener('mynus-mode-refresh784',footer);
+ window.addEventListener('offline',()=>{reachable=false;render();});
+ let checking=null;
+ function verify(){
+  if(checking)return checking;
+  if(!mynusSessionToken||mynusLoggedOut760){signedIn=false;render();return Promise.resolve();}
+  checking=(async()=>{
+   try{const response=await mynusFetch('/api/current-user',{cache:'no-store',signal:AbortSignal.timeout(5000)});if(response.ok){signedIn=true;reachable=true;}else{if(response.status===401)signedIn=false;reachable=false;}}
+   catch(_){reachable=false;}
+   finally{checking=null;render();}
+  })();return checking;
+ }
+ window.addEventListener('online',verify);
+ window.addEventListener('focus',verify);
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden)verify();});
+ // Browsers also display the same informative bar, without a desktop bridge.
+ if(!window.mynusNativeFiles?.available()){
+  const bar=document.createElement('div');bar.id='mynusModeBar784';
+  bar.style.cssText='display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:4px 10px;font:12px sans-serif;background:#fff;color:#222';
+  const info=document.createElement('span'),link=document.createElement('button');
+  link.type='button';link.textContent='· '+instruction;
+  link.style.cssText='border:0;padding:0;background:transparent;color:#0000ff;cursor:pointer;font:inherit;text-decoration:underline';
+  link.onclick=()=>window.dispatchEvent(new Event('mynus-open-signin784'));
+  bar.append(info,link);document.body.prepend(bar);
+ }
+ if(notice)new MutationObserver(footer).observe(notice,{childList:true,characterData:true,subtree:true});
+ render();if(mynusSessionToken)verify();
+})();
+
+</script>
