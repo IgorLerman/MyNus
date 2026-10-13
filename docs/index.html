@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>Fix Microphone Track | 7.8.1 </title>
+  <title>Fix Save Master | 7.8.2 </title>
 
 
  <style>
@@ -3444,7 +3444,7 @@ window.addEventListener('keydown',event=>{
    if(message.error)request.reject(new Error(message.error));else request.resolve(message.result);
  });
  function request(action,data={}) {
-   if(!available())return Promise.reject(new Error('Update MyNus.exe to 7.8.1 to use the project folder.'));
+   if(!available())return Promise.reject(new Error('Update MyNus.exe to 7.8.2 to use the project folder.'));
    const id=crypto.randomUUID();
    return new Promise((resolve,reject)=>{
      const timer=setTimeout(()=>{pending.delete(id);reject(new Error('Desktop file operation timed out.'));},1800000);
@@ -3480,7 +3480,7 @@ window.addEventListener('keydown',event=>{
 
 </script>
 <style>
-/* 7.8.1 compact track headings and desktop header */
+/* 7.8.2 compact track headings and desktop header */
 .track-controls{grid-template-columns:max-content minmax(0,1fr)!important;}
 .track-title{white-space:nowrap;display:flex;align-items:center;gap:4px;}
 .track-title .track-tonic{display:inline!important;margin:0!important;}
@@ -3563,6 +3563,11 @@ html.mynus-native-header #mnConsoleButton,html.mynus-native-header #mnLoginButto
 .rec-history-buttons781 button{flex:1;min-width:0;height:20px;padding:2px 3px;font-size:10px;white-space:nowrap}
 .rec-history781 .master-state{margin:5px 0 0;font-size:11px;min-height:14px;overflow-wrap:anywhere}
 .track.generated-track .master-controls{align-self:start;flex:0 0 auto}
+</style><style>
+.track:has(.timeline-scroll[data-track="master"]) .timeline-scroll{height:100px;min-height:0}
+.track:has(.timeline-scroll[data-track="master"]){min-height:0!important}
+.track:has(.timeline-scroll[data-track="master"]) .master-controls{align-self:start}
+.track:has(.timeline-scroll[data-track="master"]) canvas{height:100%!important}
 </style></head>
 
 
@@ -3722,7 +3727,7 @@ html.mynus-native-header #mnConsoleButton,html.mynus-native-header #mnLoginButto
         <div class="transport-row">
 
         <button class="transport-proxy mode-proxy active" data-proxy="originalModeBtn" data-mode="original">Original</button>
-        <button class="transport-proxy mode-proxy" data-proxy="mixModeBtn" data-mode="mix">Mix</button>
+        <button class="transport-proxy mode-proxy" data-proxy="mixModeBtn" data-mode="mix">Stems</button><button class="transport-proxy" data-proxy="effectsModeBtn">Effects</button><button class="transport-proxy" data-proxy="inputsModeBtn">Inputs</button>
         <button class="transport-proxy mode-proxy" data-proxy="masterModeBtn" data-mode="master">Master</button>
         <button class="transport-proxy" data-proxy="startBtn">Start</button>
         <button class="transport-proxy play-proxy" data-proxy="playBtn">Play</button>
@@ -4443,8 +4448,8 @@ html.mynus-native-header #mnConsoleButton,html.mynus-native-header #mnLoginButto
         </div>
 
         <div class="track-buttons">
-          <button id="recordMasterBtn">Rec On</button>
-          <button id="stopMasterBtn" disabled>Rec Off</button>
+          <button id="recordMasterBtn">Mix On</button>
+          <button id="stopMasterBtn" disabled>Mix Off</button>
         </div>
 
         <div class="track-buttons">
@@ -4504,7 +4509,7 @@ html.mynus-native-header #mnConsoleButton,html.mynus-native-header #mnLoginButto
 
     <div class="track rec-shared781">
       <div class="rec-history781">
-        <div class="rec-history-title781">History</div>
+        <div class="rec-history-title781">History Rec/Mix</div>
         <div class="rec-history-buttons781"><button id="undoMasterBtn" disabled>Undo Rec</button><button id="redoMasterBtn" disabled>Redo Rec</button></div>
         <div id="masterState" class="master-state" role="status" aria-live="polite">No Records</div>
       </div>
@@ -4671,7 +4676,7 @@ html.mynus-native-header #mnConsoleButton,html.mynus-native-header #mnLoginButto
         <div class="transport-row">
 
         <button id="originalModeBtn" class="active">Original</button>
-        <button id="mixModeBtn">Mix</button>
+        <button id="mixModeBtn">Stems</button><button id="effectsModeBtn">Effects</button><button id="inputsModeBtn">Inputs</button>
         <button id="masterModeBtn">Master</button>
         <button id="startBtn">Start</button>
         <button id="playBtn">Play</button>
@@ -6339,6 +6344,7 @@ let waveformData = {
 };
 
 
+const mixGroups782=new Set(['stems']);
 const stemIds = [
   "microphone",
   "vocals",
@@ -9640,9 +9646,9 @@ function applyMix() {
 
   const anySolo =
     stemIds.some(stemId =>
-      isKaraokeUiMode() && lyricsFullScreenTrackState?.[stemId]
+      trackGroupEnabled782(stemId) && (isKaraokeUiMode() && lyricsFullScreenTrackState?.[stemId]
         ? Boolean(lyricsFullScreenTrackState[stemId].solo)
-        : Boolean(stemState[stemId].solo)
+        : Boolean(stemState[stemId].solo))
     );
 
 
@@ -9675,7 +9681,7 @@ function applyMix() {
 
 
       const enabled =
-        !state.muted
+        trackGroupEnabled782(stemId) && !state.muted
         &&
         insideCrop
         &&
@@ -9737,9 +9743,9 @@ function updateStemPlaybackVisuals() {
 
   const anySolo =
     stemIds.some(stemId =>
-      isKaraokeUiMode() && lyricsFullScreenTrackState?.[stemId]
+      trackGroupEnabled782(stemId) && (isKaraokeUiMode() && lyricsFullScreenTrackState?.[stemId]
         ? Boolean(lyricsFullScreenTrackState[stemId].solo)
-        : Boolean(stemState[stemId].solo)
+        : Boolean(stemState[stemId].solo))
     );
 
   const current = getCurrentTime();
@@ -9771,6 +9777,7 @@ function updateStemPlaybackVisuals() {
 
     const active = Boolean(
       mode === "mix"
+      && trackGroupEnabled782(stemId)
       && stemTrackIsAvailable(stemId)
       && insideCrop
       && (!anySolo || state.solo)
@@ -11889,6 +11896,7 @@ async function startMasterRecording(target='master'){
   if(masterRecording||masterRecordArmed||rec780.busy)return;
   if(!rec780.micSegments.length&&waveformData.microphone)rec780.micSegments=[{start:0,buffer:waveformData.microphone}];
  }
+ if(target==='microphone')mixGroups782.add('inputs');
  rec780.target=target;
  try{
   if(target==='microphone'){
@@ -13096,7 +13104,7 @@ async function getTrackBlob(track) {
   }
 
   return {
-    blob: savedMasterBlob || masterBlob,
+    blob: track === "master" ? (savedMasterBlob || masterBlob) : null,
     filename: "master.wav"
   };
 }
@@ -13738,7 +13746,7 @@ function getCurrentTime() {
   ) {
 
     return (
-      vocalsAudio.currentTime
+      mixClock782().currentTime
       ||
       0
     );
@@ -20248,7 +20256,7 @@ function keepTracksSynchronized() {
 
 
   const reference =
-    vocalsAudio.currentTime;
+    mixClock782().currentTime;
 
 
   instrumentalStemIds.forEach(
@@ -21444,12 +21452,7 @@ function setProjectActive(projectId = null) {
 }
 
 
-const projectTrackIds = [
-  "microphone",
-  "original", "vocals", "pitchCorrection", "harmonizer",
-  "drums", "bass", "guitar", "piano", "other", "master",
-  "reserve1", "reserve2", "reserve3"
-];
+const projectTrackIds = ["microphone", "original", "vocals", "pitchCorrection", "harmonizer", "drums", "bass", "guitar", "piano", "other", "master", "reserve1", "reserve2", "reserve3", "reserve4", "reserve5", "reserve6", "reserve7", "reserve8", "reserve9", "reserve10", "reserve11", "reserve12", "reserve13"];
 
 // Сохранение текущего Project и связанных данных.
 function projectSafeName() {
@@ -21507,7 +21510,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "7.8.1",
+    version: "7.8.2",
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
     current_tonic: currentTrackTonic(),
@@ -21839,7 +21842,7 @@ async function saveCurrentProject(projectName, savePath, conflictAction = "", op
   const media={}, specs={}, entries=[];
   const project=projectStateJson(), lyrics=projectLyricsJson();project.tracks={};
   status.textContent="Preparing local project…";
-  for(const track of projectTrackIds.slice(0,10)) {
+  for(const track of projectTrackIds.slice(0,24)) {
     const source=await getTrackBlob(track);if(!source?.blob)continue;
     const filename=projectTrackFilename(track,source);
     media[track]=source.blob;specs[track]={file:filename,mime:source.blob.type};project.tracks[track]=filename;
@@ -22413,7 +22416,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "7.8.1";
+const MYNUS_CLIENT_VERSION = "7.8.2";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -22521,6 +22524,7 @@ async function failProjectLoader(error) {
 
 // Сохранение текущего Project и связанных данных.
 function clearProjectState() {
+  mixGroups782.clear();mixGroups782.add('stems');
   resetRec780();
   if(window.mynusMicrophone770) window.mynusMicrophone770.reset();
   void window.mynusNativeFiles.current('').catch(error=>console.warn(error.message));
@@ -25787,6 +25791,50 @@ async function mountPreview780(box,jobId){
  };
  return cleanup;
 }
+</script><script>function groupForTrack782(id){return id==='microphone'?'inputs':id==='pitchCorrection'||id==='harmonizer'?'effects':'stems';}
+function trackGroupEnabled782(id){return mixGroups782.has(groupForTrack782(id));}
+function refreshGroups782(){
+ for(const [id,group] of [['mixModeBtn','stems'],['effectsModeBtn','effects'],['inputsModeBtn','inputs']]){
+  const active=mode==='mix'&&mixGroups782.has(group);
+  document.getElementById(id)?.classList.toggle('active',active);
+  document.getElementById(id)?.setAttribute('aria-pressed',String(active));
+  document.querySelectorAll('[data-proxy="'+id+'"]').forEach(button=>{button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));});
+ }
+}
+function selectGroup782(group){
+ if(mode!=='mix'){mixGroups782.clear();mixGroups782.add(group);switchMode('mix');}
+ else if(mixGroups782.has(group))mixGroups782.delete(group);else mixGroups782.add(group);
+ applyMix();refreshGroups782();
+}
+function mixClock782(){
+ if(stemTrackIsAvailable('vocals'))return vocalsAudio;
+ for(const id of stemIds)if(stemTrackIsAvailable(id))return stemAudio[id];
+ return originalAudio;
+}
+(() => {
+ for(const [id,group] of [['mixModeBtn','stems'],['effectsModeBtn','effects'],['inputsModeBtn','inputs']]){
+  document.getElementById(id).addEventListener('click',event=>{event.stopImmediatePropagation();selectGroup782(group);},true);
+ }
+ const oldSync=syncTransportMirrors;
+ syncTransportMirrors=function(){oldSync();refreshGroups782();};
+ const oldPlay=playCurrentMode;
+ playCurrentMode=async function(){
+  originalAudio.muted=mode==='mix';
+  await oldPlay();
+  if(mode==='mix'&&isPlaying&&mixClock782()===originalAudio)await originalAudio.play();
+ };
+ const oldState=projectStateJson;
+ projectStateJson=function(){const state=oldState();state.sequencer.playback_groups=[...mixGroups782];return state;};
+ const oldPayload=localProjectPayload;
+ localProjectPayload=async function(id){
+  const data=await oldPayload(id);mixGroups782.clear();
+  for(const group of data.project?.sequencer?.playback_groups||['stems','effects','inputs'])if(['stems','effects','inputs'].includes(group))mixGroups782.add(group);
+  return data;
+ };
+ const masterRow=timelines.master.closest('.track'),controls=masterRow.querySelector('.master-controls'),viewport=masterRow.querySelector('.timeline-scroll');
+ new ResizeObserver(()=>{const height=controls.getBoundingClientRect().height;if(height>0)viewport.style.height=Math.ceil(height)+'px';}).observe(controls);
+ refreshGroups782();
+})();
 </script></body>
 </html>
   
