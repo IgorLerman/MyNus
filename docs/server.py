@@ -1,5 +1,5 @@
 # ========================================
-#  UserStatus | 7.7.0 
+#  Tokens | 7.8.0 
 # ========================================
 
 # ========================================
@@ -42,7 +42,7 @@ DESKTOP_ORIGINS = {"https://mynus.local"}
 DESKTOP_ORIGINS.update(origin.strip() for origin in os.environ.get("MYNUS_DESKTOP_ORIGINS", "").split(",") if origin.strip())
 
 def _desktop_api_path(path):
-    return path.startswith(("/api/", "/progress/", "/abort/", "/results/", "/debug/")) or path == "/separate"
+    return path.startswith(("/api/", "/progress/", "/abort/", "/results/", "/preview/", "/debug/")) or path == "/separate"
 
 @app.before_request
 def desktop_session_and_preflight():
@@ -233,7 +233,7 @@ def debug_load_trace():
         print(f"  details         = {details}", flush=True)
     print("-" * 72, flush=True)
 
-    return jsonify({"ok": True, "version": "7.7.0", "trace_id": trace_id})
+    return jsonify({"ok": True, "version": "7.8.0", "trace_id": trace_id})
 
 
 # ========================================
@@ -256,7 +256,7 @@ def json_http_error(error):
 
 @app.route("/", methods=["GET"])
 def server_status():
-    return jsonify(service="MyNus Server", version="7.7.0", status="ready")
+    return jsonify(service="MyNus Server", version="7.8.0", status="ready")
 
 
 # ========================================
@@ -853,6 +853,14 @@ def run_demucs(job_id, input_path, job_result_dir, lyrics_language="auto"):
             lyrics=lyrics,
             tonic=tonic
         )
+        try:
+            create_preview780(job_id,input_path,result,job_result_dir)
+            result['preview_ready']=True
+        except SeparationAborted:
+            raise
+        except Exception as preview_error:
+            result['preview_ready']=False
+            print('[PREVIEW] '+str(preview_error),flush=True)
         Path(job_result_dir, "result.json").write_text(json.dumps(result,ensure_ascii=False),encoding="utf-8")
     except SeparationAborted:
         pass
@@ -919,29 +927,7 @@ def progress(job_id):
 )
 # Локальная серверная операция этого блока.
 def result_file(job_id,filename):
-    uid=current_user_id()
-    if filename not in ('vocals.mp3','drums.mp3','bass.mp3','guitar.mp3','piano.mp3','other.mp3'):
-        abort(404,description='Result file not found.')
-    with _media_lock760:
-        row=separation_row760(job_id,uid)
-        if row['files_deleted_at']:abort(410,description='Separation files were deleted.')
-        if row['status']!='completed':abort(409,description='Separation is not complete.')
-        allowed,plan=result_access760(row)
-        if not allowed:return jsonify(error='Payment for this separation or an active plan is required to download.',code=402,separation_id=row['separation_id']),402
-        folder=_safe_media_folder760(RESULT_DIR,job_id)
-        _media_readers760[job_id]=_media_readers760.get(job_id,0)+1
-        try:response=send_from_directory(folder,filename)
-        except BaseException:
-            _media_readers760[job_id]-=1
-            raise
-    def release():
-        with _media_lock760:
-            count=_media_readers760.get(job_id,1)-1
-            if count:_media_readers760[job_id]=count
-            else:_media_readers760.pop(job_id,None)
-    from werkzeug.wsgi import ClosingIterator
-    response.response=ClosingIterator(response.response,release)
-    return response
+    abort(503,description='Result service is not initialized.')
 
 
 # ========================================
@@ -2597,7 +2583,7 @@ def account_payments():
                    subscription=dict(subscription) if subscription else None,
                    payments=[dict(row) for row in payments],
                    change_plan_available=False, manage_subscription_available=False,
-                   message="Payment management is not connected yet. No charge or subscription change will be made.")
+                   message="Test mode: confirm or check the token below. No real charge is made.")
 
 
 migrate_account_changes()
@@ -2735,10 +2721,10 @@ def reject_legacy_project_storage():
         path == "/saved-projects" or path.startswith("/saved-projects/") or
         path.startswith("/opened-projects/") or path.startswith("/playlist/") or
         path == "/lyrics/save-current"):
-        return jsonify(error="Project save/load is local in MyNus 7.7.0"), 410
+        return jsonify(error="Project save/load is local in MyNus 7.8.0"), 410
 
 
-# 7.7.0 schema extension; SQLite backup before the first migration.
+# 7.8.0 schema extension; SQLite backup before the first migration.
 from datetime import datetime, timezone, timedelta
 def columns(db,table):
     return {row[1] for row in db.execute(f'PRAGMA table_info({table})')}
@@ -2816,13 +2802,13 @@ def ensure_schema760():
     try:
         needed=not columns(db,'sessions') or 'max_active_sessions' not in columns(db,'users') or 'separation_id' not in columns(db,'payments') or 'files_deleted_at' not in columns(db,'separations')
         if needed:
-            backup=DB_PATH.with_name('mynus-before-7.7.0-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')+'.db')
+            backup=DB_PATH.with_name('mynus-before-7.8.0-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')+'.db')
             with sqlite3.connect(backup) as target:db.backup(target)
             print('[DATABASE] Backup: '+str(backup),flush=True)
         migrate(db)
     finally:db.close()
 ensure_schema760()
-# MyNus 7.7.0: sessions, paid result access and scheduled media cleanup.
+# MyNus 7.8.0: sessions, paid result access and scheduled media cleanup.
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -2866,17 +2852,6 @@ with db_connection() as database:
     if 'status' not in {row[1] for row in database.execute('PRAGMA table_info(users)')}:
         database.execute("ALTER TABLE users ADD COLUMN status TEXT DEFAULT NULL CHECK(status IN ('Subscription','OneTime'))")
 
-def result_access760(row):
-    uid,sid=row['user_id'],row['separation_id']
-    with db_connection() as db:
-        user=db.execute("SELECT status FROM users WHERE user_id=?",(uid,)).fetchone()
-        access=user['status'] if user else None
-        if access == 'Subscription':
-            return True,True
-        if access == 'OneTime':
-            paid=db.execute("SELECT 1 FROM payments WHERE user_id=? AND separation_id=? AND status='paid' AND refunded_minor=0 LIMIT 1",(uid,sid)).fetchone()
-            return bool(paid),False
-    return False,False
 
 _media_lock760=threading.RLock()
 _media_readers760={}
@@ -2893,12 +2868,14 @@ def progress_payload760(job_id,uid):
         if not metadata.is_file():abort(404,description='Result is unavailable. Restarted unfinished jobs cannot be resumed.')
         payload=json.loads(metadata.read_text(encoding='utf-8'))
         payload.update(status='done',progress=100,user_id=uid)
-    allowed,plan=result_access760(row)
     if payload.get('status')=='done' and row['status']!='completed':
         # Publish completion to the DB before the client immediately downloads.
         with db_connection() as db:
             db.execute("UPDATE separations SET status='completed',finished_at=COALESCE(finished_at,?) WHERE separation_id=?",(_utc760(),row['separation_id']))
         row=separation_row760(job_id,uid)
+    allowed,plan=result_access760(row)
+    token=token_access780(uid,row['separation_id'],issue=False) if allowed else None
+    payload['access_token_id']=token['token_id'] if token else None
     payload.update(job_id=job_id,separation_id=row['separation_id'],download_allowed=allowed,active_plan=plan,delete_after=row['delete_after'])
     return payload
 
@@ -2986,6 +2963,314 @@ def cleanup_worker760():
         if today!=previous:
             cleanup_media760();previous=today
 
+
+# Result-access history is separate from login sessions.
+with db_connection() as original:
+    exists=original.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='tokens'").fetchone()
+    needs_extension=not exists or 'received_files' not in {row[1] for row in original.execute('PRAGMA table_info(tokens)')}
+    if needs_extension:
+        backup=Path(DB_PATH).with_name('mynus-before-tokens-780-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%f')+'.db')
+        with sqlite3.connect(backup) as saved:original.backup(saved)
+with db_connection() as db:
+    db.execute('''CREATE TABLE IF NOT EXISTS tokens (
+        token_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(user_id),
+        token TEXT NOT NULL UNIQUE CHECK(length(token)=14),
+        type TEXT NOT NULL CHECK(type IN ('Subscription','OneTime')),
+        separation_id INTEGER REFERENCES separations(separation_id),
+        status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','used','expired','revoked')),
+        issued_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        expires_at TEXT,closed_at TEXT,
+        CHECK((type='Subscription' AND substr(token,1,3)='SUB') OR (type='OneTime' AND substr(token,1,3)='ONE')),
+        CHECK(type='OneTime' OR separation_id IS NULL))''')
+    names={row[1] for row in db.execute('PRAGMA table_info(tokens)')}
+    if 'received_files' not in names:
+        db.execute("ALTER TABLE tokens ADD COLUMN received_files TEXT NOT NULL DEFAULT '[]'")
+    db.execute('CREATE INDEX IF NOT EXISTS idx_tokens_user_status ON tokens(user_id,status)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_tokens_separation ON tokens(separation_id)')
+
+RESULT_FILES780=('vocals.mp3','drums.mp3','bass.mp3','guitar.mp3','piano.mp3','other.mp3')
+
+def token_public780(row):
+    return {key:row[key] for key in ('token_id','token','type','separation_id','status','issued_at','expires_at','closed_at')}
+
+def token_access780(uid,separation_id=None,issue=True,renew=False):
+    with db_connection() as db:
+        db.execute('BEGIN IMMEDIATE')
+        db.execute("UPDATE tokens SET status='expired',closed_at=? WHERE user_id=? AND status='active' AND expires_at IS NOT NULL AND julianday(expires_at)<=julianday('now')",(_utc760(),uid))
+        user=db.execute('SELECT status FROM users WHERE user_id=?',(uid,)).fetchone()
+        kind=user['status'] if user else None
+        if kind not in ('Subscription','OneTime'):return None
+        # A bound OneTime cannot be transferred to a different separation.
+        row=db.execute("SELECT * FROM tokens WHERE user_id=? AND type=? AND status='active' ORDER BY token_id DESC LIMIT 1",(uid,kind)).fetchone()
+        if row is None and issue:
+            # Expiry is not silently replaced by a new permanent grant.
+            last=db.execute('SELECT status FROM tokens WHERE user_id=? AND type=? ORDER BY token_id DESC LIMIT 1',(uid,kind)).fetchone()
+            if last and last['status'] in ('expired','revoked') and not renew:return None
+            for attempt in range(8):
+                value=('SUB' if kind=='Subscription' else 'ONE')+secrets.token_urlsafe(8)
+                try:
+                    number=db.execute('INSERT INTO tokens(user_id,token,type) VALUES(?,?,?)',(uid,value,kind)).lastrowid
+                    row=db.execute('SELECT * FROM tokens WHERE token_id=?',(number,)).fetchone()
+                    break
+                except sqlite3.IntegrityError:
+                    if db.execute('SELECT 1 FROM tokens WHERE token=?',(value,)).fetchone() is None:raise
+            if row is None:raise RuntimeError('Could not generate a unique token.')
+        if row is None:return None
+        if kind=='OneTime' and separation_id is not None:
+            if row['separation_id'] is not None and row['separation_id']!=separation_id:return None
+            if row['separation_id'] is None:
+                db.execute('UPDATE tokens SET separation_id=? WHERE token_id=? AND separation_id IS NULL',(separation_id,row['token_id']))
+                row=db.execute('SELECT * FROM tokens WHERE token_id=?',(row['token_id'],)).fetchone()
+        return dict(row)
+
+def result_access760(row):
+    if row['status']!='completed':return False,False
+    token=token_access780(row['user_id'],row['separation_id'])
+    return bool(token),bool(token and token['type']=='Subscription')
+
+@app.route('/api/account/tokens')
+def account_tokens780():
+    uid = current_user_id()
+
+    with db_connection() as db:
+        db.execute(
+            """UPDATE tokens
+               SET status='expired', closed_at=?
+               WHERE user_id=?
+                 AND status='active'
+                 AND expires_at IS NOT NULL
+                 AND julianday(expires_at) <= julianday('now')""",
+            (_utc760(), uid)
+        )
+
+        rows = db.execute(
+            """SELECT * FROM tokens
+               WHERE user_id=?
+               ORDER BY token_id DESC
+               LIMIT 100""",
+            (uid,)
+        ).fetchall()
+
+        user = db.execute(
+            "SELECT status FROM users WHERE user_id=?",
+            (uid,)
+        ).fetchone()
+
+    return jsonify(
+        access_status=user["status"],
+        tokens=[token_public780(row) for row in rows]
+    )
+
+
+@app.route('/api/account/tokens/confirm', methods=['POST'])
+def confirm_token780():
+    uid = current_user_id()
+    data = auth_request_data()
+
+    with db_connection() as db:
+        user = db.execute(
+            "SELECT status FROM users WHERE user_id=?",
+            (uid,)
+        ).fetchone()
+
+        kind = data.get("type") or user["status"] or "OneTime"
+
+        if kind not in ("Subscription", "OneTime"):
+            return jsonify(
+                error="Выберите Subscription или OneTime."
+            ), 400
+
+        db.execute(
+            "UPDATE users SET status=? WHERE user_id=?",
+            (kind, uid)
+        )
+
+    token = token_access780(uid, renew=True)
+
+    if token is None:
+        return jsonify(error="Не удалось создать токен."), 500
+
+    return jsonify(
+        access_status=kind,
+        token=token_public780(token),
+        test_mode=True
+    )
+
+
+
+def mark_file_received780(uid,sid,token_id,filename):
+    if not token_id:return
+    with db_connection() as db:
+        db.execute('BEGIN IMMEDIATE')
+        row=db.execute("SELECT received_files FROM tokens WHERE token_id=? AND user_id=? AND separation_id=? AND status='active'",(token_id,uid,sid)).fetchone()
+        if row:
+            names=set(json.loads(row['received_files']));names.add(filename)
+            db.execute('UPDATE tokens SET received_files=? WHERE token_id=?',(json.dumps(sorted(names)),token_id))
+
+@app.route('/api/separations/<job_id>/received',methods=['POST'])
+def acknowledge_result780(job_id):
+    uid=current_user_id();data=auth_request_data();row=separation_row760(job_id,uid)
+    token_id=data.get('token_id')
+    with _media_lock760,db_connection() as db:
+        db.execute('BEGIN IMMEDIATE')
+        token=db.execute('SELECT * FROM tokens WHERE token_id=? AND user_id=?',(token_id,uid)).fetchone()
+        if not token:abort(404,description='Token not found.')
+        if token['type']=='Subscription':
+            if token['status']!='active':abort(403,description='Token is not active.')
+            return jsonify(token=token_public780(token))
+        if token['separation_id']!=row['separation_id']:abort(403,description='Token belongs to a different separation.')
+        if token['status']=='used':return jsonify(token=token_public780(token))
+        if token['status']!='active':abort(403,description='Token is not active.')
+        if set(json.loads(token['received_files']))!=set(RESULT_FILES780):abort(409,description='The complete result has not been transferred yet. Retry incomplete downloads.')
+        supplied={item.get('name'):item.get('size') for item in data.get('files',[]) if isinstance(item,dict)}
+        folder=_safe_media_folder760(RESULT_DIR,job_id)
+        if set(supplied)!=set(RESULT_FILES780) or any(supplied[name]!=(folder/name).stat().st_size for name in RESULT_FILES780):
+            abort(409,description='Complete file receipt confirmation is required.')
+        db.execute("UPDATE tokens SET status='used',closed_at=? WHERE token_id=?",(_utc760(),token_id))
+        db.execute("UPDATE users SET status=NULL WHERE user_id=? AND status='OneTime'",(uid,))
+        final=db.execute('SELECT * FROM tokens WHERE token_id=?',(token_id,)).fetchone()
+    return jsonify(token=token_public780(final),access_status=None)
+
+def result_file(job_id,filename):
+    uid=current_user_id()
+    if filename not in RESULT_FILES780:abort(404,description='Result file not found.')
+    with _media_lock760:
+        row=separation_row760(job_id,uid)
+        if row['files_deleted_at']:abort(410,description='Separation files were deleted.')
+        if row['status']!='completed':abort(409,description='Separation is not complete.')
+        token=token_access780(uid,row['separation_id'])
+        if token is None:return jsonify(error='An active result-access token is required.',code=402,separation_id=row['separation_id']),402
+        folder=_safe_media_folder760(RESULT_DIR,job_id)
+        response=send_from_directory(folder,filename)
+        _media_readers760[job_id]=_media_readers760.get(job_id,0)+1
+    original=response.response
+    state={'complete':False,'released':False}
+    def release():
+        if state['released']:return
+        state['released']=True
+        try:
+            if state['complete'] and response.status_code==200 and token['type']=='OneTime':mark_file_received780(uid,row['separation_id'],token['token_id'],filename)
+        finally:
+            if hasattr(original,'close'):original.close()
+            with _media_lock760:
+                count=_media_readers760.get(job_id,1)-1
+                if count:_media_readers760[job_id]=count
+                else:_media_readers760.pop(job_id,None)
+    def transfer():
+        try:
+            yield from original
+            state['complete']=True
+        finally:
+            release()
+    from werkzeug.wsgi import ClosingIterator
+    response.response=ClosingIterator(transfer(),release)
+    return response
+
+# Replace the earlier registered view, retaining its route and auth middleware.
+app.view_functions['result_file']=result_file
+
+import bisect
+_preview_locks780={}
+
+def preview_window780(lyrics,total):
+    length=min(30.,max(0.,float(total)))
+    words=[w for w in (lyrics or {}).get('words',[]) if isinstance(w,dict) and isinstance(w.get('start'),(int,float)) and isinstance(w.get('end'),(int,float)) and w['end']>w['start']]
+    times=sorted(max(0.,float(w['start'])) for w in words)
+    if not times:return min(max(0.,total-length),max(0.,total/3)),length
+    candidates={max(0.,min(total-length,t-2.)) for t in times}
+    start=max(candidates,key=lambda x:(bisect.bisect_right(times,x+length)-bisect.bisect_left(times,x),-x))
+    return start,length
+
+def create_preview780(job_id,input_path,result,job_result_dir):
+    folder=Path(job_result_dir);manifest=folder/'preview.json'
+    if manifest.is_file():return json.loads(manifest.read_text(encoding='utf-8'))
+    ffmpeg=find_ffmpeg()
+    if not ffmpeg:raise RuntimeError('FFmpeg is required for preview generation.')
+    probe=shutil.which('ffprobe') or str(Path(ffmpeg).with_name('ffprobe.exe' if os.name=='nt' else 'ffprobe'))
+    measured=subprocess.run([probe,'-v','error','-show_entries','format=duration','-of','default=noprint_wrappers=1:nokey=1',str(input_path)],capture_output=True,text=True,timeout=30)
+    if measured.returncode:raise RuntimeError('Cannot measure preview source duration: '+measured.stderr[-300:])
+    total=float(measured.stdout.strip());start,length=preview_window780(result.get('lyrics'),total)
+    if length<=0:raise RuntimeError('Preview source is empty.')
+    timed=any(isinstance(w,dict) and isinstance(w.get('start'),(int,float)) and isinstance(w.get('end'),(int,float)) and w['end']>w['start'] for w in (result.get('lyrics') or {}).get('words',[]))
+    if not timed:
+        # No transcript: use the most energetic vocal window instead of guessing.
+        import array
+        decoded=subprocess.run([ffmpeg,'-v','error','-i',str(folder/'vocals.mp3'),'-f','f32le','-ac','1','-ar','1000','pipe:1'],capture_output=True,timeout=120)
+        if decoded.returncode==0:
+            samples=array.array('f');samples.frombytes(decoded.stdout)
+            if sys.byteorder!='little':samples.byteswap()
+            energy=[sum(v*v for v in samples[i:i+1000]) for i in range(0,len(samples),1000)]
+            width=max(1,int(length));scores=[0.]
+            for e in energy:scores.append(scores[-1]+e)
+            if energy:start=float(max(range(max(1,len(energy)-width+1)),key=lambda i:scores[min(len(energy),i+width)]-scores[i]))
+            start=min(max(0.,total-length),start)
+    def command(arguments):
+        cmd=[ffmpeg,'-hide_banner','-loglevel','error','-y']+arguments
+        if job_id in job_controls and not job_controls[job_id]['finished'].is_set():_run_job_command(job_id,cmd)
+        else:
+            run=subprocess.run(cmd,capture_output=True,text=True,timeout=120)
+            if run.returncode:raise RuntimeError(run.stderr[-500:])
+    encoding=['-t',str(length),'-vn','-ac','2','-ar','44100','-codec:a','libmp3lame','-b:a','128k']
+    for name,source in [('original',input_path),('vocals',folder/'vocals.mp3')]:
+        command(['-ss',str(start),'-i',str(source)]+encoding+[str(folder/('preview-'+name+'.mp3'))])
+    inputs=[]
+    for stem in ('drums','bass','guitar','piano','other'):inputs+=['-ss',str(start),'-i',str(folder/(stem+'.mp3'))]
+    command(inputs+['-filter_complex','amix=inputs=5:normalize=0,alimiter=limit=0.98:level=0']+encoding+[str(folder/'preview-minus.mp3')])
+    words=[]
+    for word in (result.get('lyrics') or {}).get('words',[]):
+        if not isinstance(word,dict) or not isinstance(word.get('start'),(int,float)) or not isinstance(word.get('end'),(int,float)):continue
+        if word['end']>start and word['start']<start+length:
+            words.append({'word':str(word.get('word','')),'start':max(0.,word['start']-start),'end':min(length,word['end']-start)})
+    payload={'start':start,'duration':length,'words':words,'audio':{name:f'/preview/{job_id}/{name}.mp3' for name in ('original','vocals','minus')}}
+    temporary=folder/'preview.tmp';temporary.write_text(json.dumps(payload,ensure_ascii=False),encoding='utf-8');temporary.replace(manifest)
+    return payload
+
+@app.route('/api/separations/<job_id>/preview')
+def preview_metadata780(job_id):
+    uid=current_user_id()
+    with _media_lock760:
+        row=separation_row760(job_id,uid)
+        if row['files_deleted_at']:abort(410,description='Preview has expired.')
+        if row['status']!='completed':abort(409,description='Separation is not complete.')
+        folder=_safe_media_folder760(RESULT_DIR,job_id)
+        lock=_preview_locks780.setdefault(job_id,threading.Lock())
+        _media_readers760[job_id]=_media_readers760.get(job_id,0)+1
+    try:
+        with lock:
+            saved=folder/'preview.json'
+            if saved.is_file():return jsonify(json.loads(saved.read_text(encoding='utf-8')))
+            result=json.loads((folder/'result.json').read_text(encoding='utf-8'))
+            upload=_safe_media_folder760(UPLOAD_DIR,job_id)
+            sources=[p for p in upload.iterdir() if p.is_file() and not p.is_symlink()]
+            if not sources:abort(404,description='Preview original audio is unavailable.')
+            return jsonify(create_preview780(job_id,sources[0],result,folder))
+    except FileNotFoundError:abort(404,description='Preview source is unavailable.')
+    finally:
+        with _media_lock760:
+            count=_media_readers760.get(job_id,1)-1
+            if count:_media_readers760[job_id]=count
+            else:_media_readers760.pop(job_id,None)
+
+@app.route('/preview/<job_id>/<filename>')
+def preview_audio780(job_id,filename):
+    uid=current_user_id()
+    if filename not in ('original.mp3','vocals.mp3','minus.mp3'):abort(404)
+    with _media_lock760:
+        row=separation_row760(job_id,uid)
+        if row['files_deleted_at']:abort(410)
+        if row['status']!='completed':abort(409)
+        folder=_safe_media_folder760(RESULT_DIR,job_id)
+        response=send_from_directory(folder,'preview-'+filename)
+        _media_readers760[job_id]=_media_readers760.get(job_id,0)+1
+    def release():
+        with _media_lock760:
+            count=_media_readers760.get(job_id,1)-1
+            if count:_media_readers760[job_id]=count
+            else:_media_readers760.pop(job_id,None)
+    from werkzeug.wsgi import ClosingIterator
+    response.response=ClosingIterator(response.response,release)
+    return response
 
 if __name__ == "__main__":
     with open(__file__, "r", encoding="utf-8-sig") as f:
