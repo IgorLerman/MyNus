@@ -1,5 +1,5 @@
 # ========================================
-#  Tokens | 7.8.0 
+#  AdminTool | 7.9.0 
 # ========================================
 
 # ========================================
@@ -51,16 +51,13 @@ def desktop_session_and_preflight():
         return "", 204
     auth = request.headers.get("Authorization", "")
     if auth.startswith("Bearer "):
-        serializer = app.session_interface.get_signing_serializer(app)
-        try:
-            payload = serializer.loads(auth[7:], max_age=43200)
-            if not isinstance(payload, dict):
-                raise ValueError("Invalid session")
+        key=auth[7:]
+        with db_connection() as db:
+            row=db.execute('SELECT session_id,user_id FROM sessions WHERE login_key=? AND revoked_at IS NULL',(key,)).fetchone() if re.fullmatch(r'[A-Za-z0-9_-]{11}',key) else None
+        if not row:
             session.clear()
-            session.update(payload)
-        except (BadSignature, ValueError):
-            session.clear()
-            return jsonify(error="Sign in or register to continue.", code=401), 401
+            return jsonify(error='Войдите в аккаунт.',code=401),401
+        session.update(user_id=row['user_id'],session_id=row['session_id'])
 
 @app.after_request
 def desktop_response_headers(response):
@@ -68,13 +65,13 @@ def desktop_response_headers(response):
     if origin in DESKTOP_ORIGINS and _desktop_api_path(request.path):
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Last-Event-ID, X-MyNus-Load-Trace, X-MyNus-Load-Track"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Last-Event-ID, X-MyNus-Load-Trace, X-MyNus-Load-Track, X-MyNus-Client, X-MyNus-Background"
         response.headers["Access-Control-Expose-Headers"] = "X-MyNus-Session"
         response.vary.add("Origin")
     if request.path in ("/api/auth/login","/api/auth/register","/api/auth/logout","/api/current-user") and request.method != "OPTIONS":
-        serializer = app.session_interface.get_signing_serializer(app)
-        if serializer:
-            response.headers["X-MyNus-Session"] = serializer.dumps(dict(session)) if session.get("user_id") else ""
+        with db_connection() as db:
+            row=db.execute('SELECT login_key FROM sessions WHERE session_id=? AND user_id=? AND revoked_at IS NULL',(session.get('session_id'),session.get('user_id'))).fetchone()
+        response.headers['X-MyNus-Session']=row['login_key'] if row else ''
     return response
 
 
@@ -107,7 +104,7 @@ class _MirroredServerStream:
             lines = text.replace("\r", "\n").split("\n")
             self.pending[key] = lines.pop()[-16000:]
             for line in lines:
-                if line.strip() and "/debug/server-logs" not in line:
+                if line.strip() and not any(path in line for path in ("/debug/server-logs","/api/admin/console","/api/device-logs","/api/current-user")):
                     _publish_server_line(line, self.level)
         return result
     def flush(self):
@@ -233,7 +230,7 @@ def debug_load_trace():
         print(f"  details         = {details}", flush=True)
     print("-" * 72, flush=True)
 
-    return jsonify({"ok": True, "version": "7.8.0", "trace_id": trace_id})
+    return jsonify({"ok": True, "version": "7.9.0", "trace_id": trace_id})
 
 
 # ========================================
@@ -256,7 +253,7 @@ def json_http_error(error):
 
 @app.route("/", methods=["GET"])
 def server_status():
-    return jsonify(service="MyNus Server", version="7.8.0", status="ready")
+    return jsonify(service="MyNus Server", version="7.9.0", status="ready")
 
 
 # ========================================
@@ -289,9 +286,9 @@ def separate():
     with db_connection() as db:
         separation_id = db.execute(
             """INSERT INTO separations
-               (user_id,client_request_id,source_kind,source_name,status,started_at)
-               VALUES (?,?,'local',?,'running',?)""",
-            (uid, "job:" + job_id, audio.filename, utc_now()),
+               (user_id,client_request_id,source_kind,source_name,status,started_at,session_id)
+               VALUES (?,?,'local',?,'running',?,?)""",
+            (uid, "job:" + job_id, audio.filename, utc_now(),session.get("session_id")),
         ).lastrowid
         write_log(db, uid, "separation.started", audio.filename, sid=separation_id)
 
@@ -2142,7 +2139,16 @@ from urllib.parse import urlsplit, unquote
 from flask import session, abort
 
 DB_PATH = Path(BASE_DIR) / "mynus.db"
-app.secret_key = app.secret_key or secrets.token_hex(32)
+def _server_code790():
+    path=Path(BASE_DIR)/'.session-key'
+    try:
+        with path.open('x',encoding='ascii') as handle:
+            handle.write(secrets.token_urlsafe(16));handle.flush();os.fsync(handle.fileno())
+    except FileExistsError:pass
+    code=path.read_text(encoding='ascii').strip()
+    if not re.fullmatch(r'[A-Za-z0-9_-]{22}',code):raise RuntimeError('Неверный код сервера в .session-key: нужен 22-символьный код.')
+    return code
+app.secret_key = _server_code790()
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
@@ -2339,8 +2345,8 @@ def register_user():
         try:
             with db_connection() as db:
                 uid = db.execute(
-                    "INSERT INTO users (name,email,phone,email_verified_at,first_name,last_name,country) "
-                    "VALUES (?,?,?,?,?,?,?)",
+                    "INSERT INTO users (name,email,phone,email_verified_at,first_name,last_name,country,max_active_sessions) "
+                    "VALUES (?,?,?,?,?,?,?,1)",
                     (pending["first_name"] + " " + pending["last_name"], email,
                      pending["phone"], utc_now(), pending["first_name"],
                      pending["last_name"], pending["country"]),
@@ -2371,11 +2377,13 @@ def login_email():
 @app.route("/api/auth/logout", methods=["POST"])
 def logout_user():
     auth_request_data()
-    sid=session.get("session_id")
+    sid,uid=session.get("session_id"),session.get("user_id")
+    closed=0
     if sid:
         with db_connection() as db:
-            db.execute("UPDATE sessions SET revoked_at=? WHERE session_id=? AND user_id=? AND revoked_at IS NULL",(_utc760(),sid,session.get("user_id")))
+            closed=db.execute("UPDATE sessions SET revoked_at=? WHERE session_id=? AND user_id=? AND revoked_at IS NULL",(_utc760(),sid,uid)).rowcount
     session.clear()
+    if closed:publish_account_event790(uid,sid,'Выход из аккаунта')
     return jsonify(ok=True)
 
 
@@ -2645,6 +2653,7 @@ def watch_separation(job_id, uid, sid):
                    WHERE separation_id=? AND user_id=?""",
                 (status, utc_now(), state.get("error"), sid, uid),
             )
+            finish_session_operation790(db,sid)
             write_log(
                 db, uid,
                 "separation." + status,
@@ -2721,10 +2730,10 @@ def reject_legacy_project_storage():
         path == "/saved-projects" or path.startswith("/saved-projects/") or
         path.startswith("/opened-projects/") or path.startswith("/playlist/") or
         path == "/lyrics/save-current"):
-        return jsonify(error="Project save/load is local in MyNus 7.8.0"), 410
+        return jsonify(error="Project save/load is local in MyNus 7.9.0"), 410
 
 
-# 7.8.0 schema extension; SQLite backup before the first migration.
+# 7.9.0 schema extension; SQLite backup before the first migration.
 from datetime import datetime, timezone, timedelta
 def columns(db,table):
     return {row[1] for row in db.execute(f'PRAGMA table_info({table})')}
@@ -2802,13 +2811,13 @@ def ensure_schema760():
     try:
         needed=not columns(db,'sessions') or 'max_active_sessions' not in columns(db,'users') or 'separation_id' not in columns(db,'payments') or 'files_deleted_at' not in columns(db,'separations')
         if needed:
-            backup=DB_PATH.with_name('mynus-before-7.8.0-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')+'.db')
+            backup=DB_PATH.with_name('mynus-before-7.9.0-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')+'.db')
             with sqlite3.connect(backup) as target:db.backup(target)
             print('[DATABASE] Backup: '+str(backup),flush=True)
-        migrate(db)
+        if needed:migrate(db)
     finally:db.close()
 ensure_schema760()
-# MyNus 7.8.0: sessions, paid result access and scheduled media cleanup.
+# MyNus 7.9.0: sessions, paid result access and scheduled media cleanup.
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -2824,6 +2833,10 @@ def session_is_active760():
 
 @app.before_request
 def protected_operations760():
+    if request.path in ('/admin','/admin.html') or request.path.startswith('/api/admin/'):
+        return
+    if request.path in ('/admin','/admin.html') or request.path.startswith('/api/admin/'):
+        return
     public={'/','/api/auth/login','/api/auth/register','/api/auth/register-code','/api/auth/logout'}
     if request.method=='OPTIONS' or request.path in public:return
     if not session_is_active760():
@@ -3271,6 +3284,374 @@ def preview_audio780(job_id,filename):
     from werkzeug.wsgi import ClosingIterator
     response.response=ClosingIterator(response.response,release)
     return response
+
+SESSION_IDLE790 = 3600
+
+def _deadline790():
+    return (datetime.now(timezone.utc)+timedelta(seconds=SESSION_IDLE790)).isoformat(timespec='milliseconds').replace('+00:00','Z')
+
+def _running790(db,sid):
+    for row in db.execute("SELECT client_request_id FROM separations WHERE session_id=? AND status IN ('running','queued')",(sid,)):
+        job=jobs.get((row[0] or '').removeprefix('job:'))
+        if job and job.get('status') not in ('done','error','aborted'):return True
+    return False
+
+def session_is_active760():
+    sid,uid=session.get('session_id'),session.get('user_id')
+    if not sid or uid is None:return False
+    with db_connection() as db:
+        row=db.execute('SELECT s.*,u.is_blocked FROM sessions s JOIN users u ON u.user_id=s.user_id WHERE s.session_id=? AND s.user_id=?',(sid,uid)).fetchone()
+        if not row or row['revoked_at'] or row['is_blocked'] or not row['login_key']:return False
+        if row['expires_at']<=_utc760():
+            if _running790(db,sid):
+                db.execute('UPDATE sessions SET expires_at=? WHERE session_id=?',(_deadline790(),sid))
+            else:
+                db.execute('UPDATE sessions SET revoked_at=? WHERE session_id=? AND revoked_at IS NULL',(_utc760(),sid));return False
+        return True
+
+def _device790():
+    ua=request.headers.get('User-Agent','')[:1000]
+    if 'Android' in ua:os_name='Android'
+    elif any(x in ua for x in ('iPhone','iPad','iPod')):os_name='iOS'
+    elif 'Windows' in ua:os_name='Windows'
+    elif 'Macintosh' in ua:os_name='macOS'
+    elif 'Linux' in ua:os_name='Linux'
+    else:os_name='Не определено'
+    kind='Планшет' if 'iPad' in ua or ('Android' in ua and 'Mobile' not in ua) else 'Телефон' if any(x in ua for x in ('Mobile','iPhone','iPod')) else 'Компьютер'
+    if request.headers.get('X-MyNus-Client')=='WebView2':browser='WebView2'
+    elif 'Edg/' in ua:browser='Edge'
+    elif 'OPR/' in ua:browser='Opera'
+    elif 'Firefox/' in ua:browser='Firefox'
+    elif any(x in ua for x in ('Chrome/','CriOS/')):browser='Chrome'
+    elif 'Safari/' in ua:browser='Safari'
+    else:browser='Не определено'
+    return kind,os_name,browser
+
+def start_session760(uid):
+    now=_utc760();device=_device790()
+    with db_connection() as db:
+        db.execute('BEGIN IMMEDIATE')
+        user=db.execute('SELECT is_blocked,max_active_sessions FROM users WHERE user_id=?',(uid,)).fetchone()
+        if not user or user['is_blocked']:abort(403,description='Аккаунт заблокирован.')
+        rows=db.execute('SELECT * FROM sessions WHERE user_id=? AND revoked_at IS NULL',(uid,)).fetchall()
+        for row in rows:
+            if row['expires_at']<=now and not _running790(db,row['session_id']):
+                db.execute('UPDATE sessions SET revoked_at=? WHERE session_id=?',(now,row['session_id']))
+        presented=request.headers.get('Authorization','').removeprefix('Bearer ')
+        same=next((row for row in rows if row['login_key'] and secrets.compare_digest(row['login_key'],presented) and (row['expires_at']>now or _running790(db,row['session_id']))),None)
+        if same:
+            db.execute('UPDATE sessions SET last_seen_at=?,expires_at=?,device_type=?,os=?,browser=? WHERE session_id=?',(now,_deadline790(),*device,same['session_id']))
+            sid=same['session_id']
+        else:
+            count=db.execute('SELECT COUNT(*) FROM sessions WHERE user_id=? AND revoked_at IS NULL',(uid,)).fetchone()[0]
+            if count>=user['max_active_sessions']:abort(409,description='Вход в аккаунт уже выполнен.')
+            sid=secrets.token_hex(32)
+            for attempt in range(8):
+                key=secrets.token_urlsafe(8)
+                try:
+                    db.execute('INSERT INTO sessions(session_id,user_id,created_at,expires_at,last_seen_at,login_key,device_type,os,browser) VALUES(?,?,?,?,?,?,?,?,?)',(sid,uid,now,_deadline790(),now,key,*device));break
+                except sqlite3.IntegrityError:
+                    if attempt==7:raise
+    session.clear();session.permanent=False;session.update(user_id=uid,session_id=sid)
+    publish_account_event790(uid,sid,'Вход в аккаунт')
+
+@app.before_request
+def activity790():
+    if request.path.startswith('/api/admin/') or request.path in ('/admin','/admin.html'):return
+    if not session.get('session_id') or not session_is_active760():return
+    background=request.headers.get('X-MyNus-Background')=='1' or request.path.startswith('/debug/') or request.path=='/api/device-logs'
+    if not background and request.path not in ('/','/api/auth/logout') and not request.path.startswith('/api/auth/'):
+        with db_connection() as db:
+            db.execute('UPDATE sessions SET last_seen_at=?,expires_at=? WHERE session_id=? AND revoked_at IS NULL',(_utc760(),_deadline790(),session['session_id']))
+
+def finish_session_operation790(db,separation_id):
+    db.execute('UPDATE sessions SET last_seen_at=?,expires_at=? WHERE revoked_at IS NULL AND session_id=(SELECT session_id FROM separations WHERE separation_id=?)',(_utc760(),_deadline790(),separation_id))
+
+def ensure_sessions790():
+    expected={'users':['console_color','is_blocked'],'sessions':['login_key','device_type','os','browser'],'separations':['session_id'],'diagnostic_logs':['session_id']}
+    with db_connection() as db:
+        missing={table:[name for name in names if name not in columns(db,table)] for table,names in expected.items()}
+        if any(missing.values()):raise RuntimeError('Выполните SQL обновления базы: '+str(missing))
+        old=db.execute('SELECT COUNT(*) FROM sessions WHERE login_key IS NULL AND revoked_at IS NULL').fetchone()[0]
+        if old:
+            db.execute('UPDATE sessions SET revoked_at=? WHERE login_key IS NULL AND revoked_at IS NULL',(_utc760(),))
+            print('[SERVER] Старые входы завершены при переходе на ключи 7.9.0: '+str(old))
+ensure_sessions790()
+
+# Simple administrator console. Independent of ordinary account/session limits.
+from flask import send_file
+from functools import wraps
+from urllib.parse import urlsplit
+
+def _admin_local_only():
+    host=urlsplit('http://'+request.host).hostname
+    proxied=any(request.headers.get(key) for key in ('Forwarded','X-Forwarded-For','X-Forwarded-Host','X-Forwarded-Proto','CF-Connecting-IP'))
+    if request.remote_addr not in ('127.0.0.1','::1') or host not in ('127.0.0.1','localhost','::1') or proxied:
+        abort(403,description='Админка без пароля доступна только через http://127.0.0.1:5000/admin на компьютере сервера.')
+    origin=request.headers.get('Origin')
+    if origin and origin.rstrip('/')!=request.host_url.rstrip('/'):
+        abort(403,description='Откройте админку непосредственно на этом сервере.')
+
+def admin_required(function):
+    @wraps(function)
+    def wrapped(*args,**kwargs):
+        _admin_local_only()
+        if not session.get('admin_csrf'):session['admin_csrf']=secrets.token_urlsafe(24)
+        if request.method!='GET':
+            csrf=request.headers.get('X-MyNus-Admin-CSRF','')
+            if not csrf or not secrets.compare_digest(csrf,session['admin_csrf']):
+                abort(403,description='Обновите страницу админки и повторите действие.')
+        return function(*args,**kwargs)
+    return wrapped
+
+@app.route('/admin')
+@app.route('/admin.html')
+def admin_page():
+    _admin_local_only()
+    response=send_file(Path(BASE_DIR)/'admin.html')
+    response.headers['Cache-Control']='no-store'
+    response.headers['X-Frame-Options']='DENY'
+    return response
+
+def _ensure_admin_schema():
+    with db_connection() as db:
+        if 'is_blocked' in columns(db,'users'):return
+        backup=Path(BASE_DIR)/('mynus-before-admin-'+datetime.now().strftime('%Y%m%d-%H%M%S')+'.db')
+        with sqlite3.connect(backup) as saved:db.backup(saved)
+        db.execute('ALTER TABLE users ADD COLUMN is_blocked INTEGER NOT NULL DEFAULT 0 CHECK(is_blocked IN (0,1))')
+
+def _admin_audit(db, event, target, details):
+    if type(target) is int:
+        uid=target
+    else:
+        row=db.execute('SELECT user_id FROM sessions WHERE session_id=?',(target,)).fetchone()
+        if row is None:abort(404,description='Сессия не найдена.')
+        uid=row[0]
+    if not db.execute('SELECT 1 FROM users WHERE user_id=?',(uid,)).fetchone():abort(404,description='Пользователь не найден.')
+    db.execute('''INSERT INTO diagnostic_logs(user_id,app_version,level,event,message,details_json)
+                  VALUES (?,'7.8.4','info',?,?,?)''',
+               (uid,'admin.'+event, 'Администратор: '+event, json.dumps({'target':target, **details}, ensure_ascii=False)))
+
+def _admin_session(row):
+    item=dict(row)
+    item['current'] = item['session_id'] == session.get('session_id')
+    item['device'] = 'Не определено'
+    return item
+
+ADMIN_PALETTE790=['#38BDF8','#4ADE80','#FACC15','#F472B6','#A78BFA','#FB923C','#2DD4BF','#F87171','#60A5FA','#A3E635','#C084FC','#FBBF24','#22D3EE','#34D399','#FB7185','#818CF8','#FDBA74','#5EEAD4','#C4B5FD','#F9A8D4','#FDE047','#7DD3FC','#86EFAC','#FCA5A5']
+from collections import deque
+_device_console790=deque(maxlen=6000)
+_device_seq790=0
+_device_lock790=threading.RLock()
+_device_rates790={}
+
+def _color790(user):return user['console_color'] or ADMIN_PALETTE790[(user['user_id']-1)%24]
+
+def publish_account_event790(uid,sid,message):
+    # Record account events before returning the login/logout response.
+    # The logout client has already disconnected, so it cannot deliver this event.
+    global _device_seq790
+    with db_connection() as db:
+        user=db.execute('SELECT user_id,email,console_color FROM users WHERE user_id=?',(uid,)).fetchone()
+        device=db.execute('SELECT device_type,os,browser FROM sessions WHERE session_id=? AND user_id=?',(sid,uid)).fetchone()
+    if not user or not device:return
+    with _device_lock790:
+        _device_seq790+=1
+        _device_console790.append(dict(id=_device_seq790,time=_utc760(),user_id=uid,session_id=sid,device=' · '.join(device[name] or 'Не определено' for name in ('device_type','os','browser')),message='EVENT: '+message+' · '+(user['email'] or '#'+str(uid)),color=_color790(user)))
+
+
+
+def _session_admin790(db,row):
+    item=dict(row)
+    item['device']=' · '.join(item.get(name) or 'Не определено' for name in ('device_type','os','browser'))
+    item['separations']=[dict(r) for r in db.execute('SELECT separation_id,source_name,status FROM separations WHERE session_id=? ORDER BY separation_id DESC',(item['session_id'],))]
+    item['operation_running']=_running790(db,item['session_id'])
+    return item
+
+@app.route('/api/admin/state')
+@admin_required
+def admin_state():
+    q=request.args.get('q','').strip()[:200];uid=request.args.get('user_id','').strip()
+    offset=max(0,request.args.get('offset',0,type=int) or 0)
+    if uid and not uid.isdigit():abort(400,description='Неверный номер пользователя.')
+    where='';params=[]
+    if uid:where=' WHERE u.user_id=?';params=[int(uid)]
+    if q:
+        where+=(' AND ' if where else ' WHERE ')+"(instr(lower(coalesce(u.email,'')),lower(?))>0 OR instr(lower(coalesce(u.name,'')),lower(?))>0)";params += [q,q]
+    with db_connection() as db:
+        users=[]
+        for row in db.execute('SELECT u.* FROM users u'+where+' ORDER BY u.user_id DESC LIMIT 200 OFFSET ?',params+[offset]):
+            item=dict(row);item['color']=_color790(item);users.append(item)
+        uc=db.execute('SELECT COUNT(*) FROM users u'+where,params).fetchone()[0]
+        sw=where+(' AND ' if where else ' WHERE ')+'s.revoked_at IS NULL AND u.is_blocked=0'
+        sessions=[]
+        for row in db.execute('SELECT s.*,u.email FROM sessions s JOIN users u ON u.user_id=s.user_id'+sw+' ORDER BY s.created_at DESC',params):
+            if row['expires_at']>_utc760() or _running790(db,row['session_id']):sessions.append(_session_admin790(db,row))
+        sc=len(sessions);sessions=sessions[offset:offset+200]
+        separations=[]
+        for row in db.execute('SELECT s.*,u.email FROM separations s JOIN users u ON u.user_id=s.user_id'+where+' ORDER BY s.separation_id DESC LIMIT 200 OFFSET ?',params+[offset]):
+            item=dict(row);job=jobs.get((item['client_request_id'] or '').removeprefix('job:'),{})
+            item['progress']=job.get('progress',100 if item['status']=='completed' else None)
+            item['file_status']='Удалены' if item['files_deleted_at'] else 'Результат готов' if item['status']=='completed' else 'Нет результата'
+            separations.append(item)
+        pc=db.execute('SELECT COUNT(*) FROM separations s JOIN users u ON u.user_id=s.user_id'+where,params).fetchone()[0]
+        tokens=[dict(row) for row in db.execute('SELECT t.*,u.email FROM tokens t JOIN users u ON u.user_id=t.user_id'+where+' ORDER BY t.token_id DESC LIMIT 200 OFFSET ?',params+[offset])]
+        tc=db.execute('SELECT COUNT(*) FROM tokens t JOIN users u ON u.user_id=t.user_id'+where,params).fetchone()[0]
+        subs=[dict(row) for row in db.execute('SELECT s.*,u.email FROM subscriptions s JOIN users u ON u.user_id=s.user_id'+where+' ORDER BY s.subscription_id DESC',params)]
+        for row in db.execute("SELECT u.* FROM users u"+where+(' AND ' if where else ' WHERE ')+"u.status='Subscription' AND NOT EXISTS(SELECT 1 FROM subscriptions s WHERE s.user_id=u.user_id)",params):
+            token=db.execute("SELECT * FROM tokens WHERE user_id=? AND type='Subscription' ORDER BY token_id DESC LIMIT 1",(row['user_id'],)).fetchone()
+            subs.append(dict(subscription_id=None,user_id=row['user_id'],email=row['email'],plan_name='Subscription',status=token['status'] if token else 'Без токена',starts_at=token['issued_at'] if token else None,ends_at=token['expires_at'] if token else None))
+        counts=dict(users=uc,sessions=sc,separations=pc,tokens=tc,subscriptions=len(subs))
+    result=jsonify(csrf=session['admin_csrf'],server_code=app.secret_key,users=users,sessions=sessions,separations=separations,tokens=tokens,subscriptions=subs[offset:offset+200],counts=counts,offset=offset,limit=200,palette=ADMIN_PALETTE790)
+    result.headers['Cache-Control']='no-store';return result
+
+def _validate_user790(data):
+    updates={}
+    if 'status' in data:
+        if data['status'] not in (None,'Subscription','OneTime'):abort(400,description='Неверный статус доступа.')
+        updates['status']=data['status']
+    if 'max_active_sessions' in data:
+        value=data['max_active_sessions']
+        if type(value) is not int or not 1<=value<=100:abort(400,description='Лимит сессий: от 1 до 100.')
+        updates['max_active_sessions']=value
+    if 'console_color' in data:
+        value=data['console_color']
+        if value is not None and (not isinstance(value,str) or not re.fullmatch(r'#[0-9a-fA-F]{6}',value)):abort(400,description='Неверный цвет.')
+        updates['console_color']=value
+    if 'is_blocked' in data:
+        if type(data['is_blocked']) is not bool:abort(400,description='Неверное значение блокировки.')
+        updates['is_blocked']=int(data['is_blocked'])
+    for key in ('first_name','last_name','email','phone','country'):
+        if key in data:
+            value=data[key]
+            if not isinstance(value,str) or len(value)>254:abort(400,description='Неверное поле профиля: '+key)
+            updates[key]=auth_email(value) if key=='email' else value.strip()
+    if not updates:abort(400,description='Нет изменений.')
+    return updates
+
+def _update_user790(db,uid,updates):
+    original=db.execute('SELECT * FROM users WHERE user_id=?',(uid,)).fetchone()
+    if not original:abort(404,description='Пользователь не найден.')
+    if 'first_name' in updates or 'last_name' in updates:updates['name']=(updates.get('first_name',original['first_name'] or '')+' '+updates.get('last_name',original['last_name'] or '')).strip()
+    db.execute('UPDATE users SET '+','.join(name+'=?' for name in updates)+' WHERE user_id=?',list(updates.values())+[uid])
+    if updates.get('is_blocked'):db.execute('UPDATE sessions SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL',(_utc760(),uid))
+    _admin_audit(db,'user.update',uid,updates)
+
+@app.route('/api/admin/users/<int:uid>',methods=['POST'])
+@admin_required
+def admin_update_user(uid):
+    updates=_validate_user790(auth_request_data())
+    try:
+        with db_connection() as db:_update_user790(db,uid,updates)
+    except sqlite3.IntegrityError:return jsonify(error='Эти данные уже используются другим аккаунтом.'),409
+    return jsonify(ok=True)
+
+@app.route('/api/admin/users/save-all',methods=['POST'])
+@admin_required
+def admin_save_all():
+    data=auth_request_data();items=data.get('users')
+    if not isinstance(items,list) or len(items)>200:abort(400,description='Допустимо до 200 изменений за раз.')
+    checked=[]
+    for item in items:
+        if not isinstance(item,dict) or type(item.get('user_id')) is not int:abort(400,description='Неверный пользователь.')
+        checked.append((item['user_id'],_validate_user790(item)))
+    try:
+        with db_connection() as db:
+            for uid,updates in checked:_update_user790(db,uid,updates)
+    except sqlite3.IntegrityError:return jsonify(error='Данные одного из пользователей уже используются. Изменения не сохранены.'),409
+    return jsonify(ok=True,count=len(checked))
+
+@app.route('/api/admin/sessions/revoke',methods=['POST'])
+@admin_required
+def admin_revoke_sessions():
+    data=auth_request_data();uid=data.get('user_id');sid=data.get('session_id')
+    with db_connection() as db:
+        if sid:
+            if not isinstance(sid,str) or len(sid)>128:abort(400)
+            count=db.execute('UPDATE sessions SET revoked_at=? WHERE session_id=? AND revoked_at IS NULL',(_utc760(),sid)).rowcount
+        elif type(uid) is int:count=db.execute('UPDATE sessions SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL',(_utc760(),uid)).rowcount
+        else:abort(400)
+        _admin_audit(db,'sessions.revoke',sid or uid,{'count':count})
+    return jsonify(ok=True,count=count)
+
+@app.route('/api/admin/users/<int:uid>/account')
+@admin_required
+def admin_account(uid):
+    with db_connection() as db:
+        row=db.execute('SELECT * FROM users WHERE user_id=?',(uid,)).fetchone()
+        if not row:abort(404)
+        user=dict(row);user['color']=_color790(user)
+        payments=[dict(r) for r in db.execute('SELECT * FROM payments WHERE user_id=? ORDER BY payment_id DESC LIMIT 25',(uid,))]
+        subscriptions=[dict(r) for r in db.execute('SELECT * FROM subscriptions WHERE user_id=? ORDER BY subscription_id DESC',(uid,))]
+        tokens=[dict(r) for r in db.execute('SELECT * FROM tokens WHERE user_id=? ORDER BY token_id DESC LIMIT 50',(uid,))]
+    return jsonify(user=user,payments=payments,subscriptions=subscriptions,tokens=tokens)
+
+@app.route('/api/admin/users/<int:uid>/tokens/confirm',methods=['POST'])
+@admin_required
+def admin_confirm_token(uid):
+    data=auth_request_data();kind=data.get('type')
+    if kind not in ('Subscription','OneTime'):abort(400)
+    with db_connection() as db:
+        if not db.execute('SELECT 1 FROM users WHERE user_id=?',(uid,)).fetchone():abort(404)
+        db.execute('UPDATE users SET status=? WHERE user_id=?',(kind,uid))
+    token=token_access780(uid,renew=True)
+    if not token:abort(409,description='Не удалось создать токен.')
+    with db_connection() as db:_admin_audit(db,'payment.confirm',uid,{'type':kind,'token_id':token['token_id']})
+    return jsonify(ok=True,token=token_public780(token),test_mode=True)
+
+@app.route('/api/admin/separations/<int:sid>')
+@admin_required
+def admin_separation(sid):
+    with db_connection() as db:
+        row=db.execute('SELECT * FROM separations WHERE separation_id=?',(sid,)).fetchone()
+        if not row:abort(404)
+        tokens=[dict(r) for r in db.execute("SELECT * FROM tokens WHERE type='OneTime' AND separation_id=? ORDER BY token_id DESC",(sid,))]
+        if not tokens:
+            sub=db.execute("SELECT * FROM tokens WHERE user_id=? AND type='Subscription' ORDER BY CASE WHEN status='active' AND (expires_at IS NULL OR expires_at>?) THEN 0 ELSE 1 END, token_id DESC LIMIT 1",(row['user_id'],_utc760())).fetchone()
+            if sub:tokens=[dict(sub)]
+    return jsonify(separation=dict(row),tokens=tokens)
+
+@app.route('/api/device-logs',methods=['POST'])
+def device_logs790():
+    uid=current_user_id();data=auth_request_data();records=data.get('records')
+    if not isinstance(records,list) or len(records)>60:abort(400)
+    if request.content_length and request.content_length>1200000:abort(413)
+    with db_connection() as db:
+        user=db.execute('SELECT * FROM users WHERE user_id=?',(uid,)).fetchone()
+        row=db.execute('SELECT * FROM sessions WHERE session_id=?',(session['session_id'],)).fetchone()
+    now=time.monotonic();sid=row['session_id']
+    global _device_seq790
+    with _device_lock790:
+        start,count=_device_rates790.get(sid,(now,0))
+        if now-start>=60:start,count=now,0
+        if count+len(records)>1000:return jsonify(error='Слишком много сообщений.'),429
+        _device_rates790[sid]=(start,count+len(records))
+        for item in records:
+            if not isinstance(item,dict) or not isinstance(item.get('message'),str):continue
+            message=re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]','',item['message'])[:16000]
+            if re.search(r'\bEVENT:\s*Account signed (?:in|out)\b',message,re.IGNORECASE):continue
+            _device_seq790+=1
+            _device_console790.append(dict(id=_device_seq790,time=_utc760(),user_id=uid,session_id=sid,device=' · '.join(row[key] or 'Не определено' for key in ('device_type','os','browser')),message=message,color=_color790(user)))
+    return jsonify(ok=True)
+
+@app.route('/api/admin/console')
+@admin_required
+def admin_console790():
+    after=max(0,request.args.get('device_after',0,type=int) or 0);server_after=max(0,request.args.get('server_after',0,type=int) or 0)
+    uid=request.args.get('user_id','');sid=request.args.get('session_id','')[:128]
+    if uid and not uid.isdigit():abort(400)
+    with _device_lock790:
+        records=[dict(r) for r in _device_console790 if r['id']>after and (not uid or r['user_id']==int(uid)) and (not sid or r['session_id']==sid)]
+        cursor=_device_seq790
+    with _server_log_condition:
+        server=[dict(r,server=True,color='#FFFFFF') for r in _server_log_records if r['id']>server_after] if not uid and not sid else []
+        server_cursor=_server_log_sequence
+    with db_connection() as db:
+        colors={row['user_id']:_color790(row) for row in db.execute('SELECT user_id,console_color FROM users')}
+    for record in records:record['color']=colors.get(record['user_id'],record['color'])
+    response=jsonify(devices=records,server=server,device_cursor=cursor,server_cursor=server_cursor)
+    response.headers['Cache-Control']='no-store';return response
+
 
 if __name__ == "__main__":
     with open(__file__, "r", encoding="utf-8-sig") as f:
