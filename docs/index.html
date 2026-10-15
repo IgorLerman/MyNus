@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>Karaoke | 7.9.1 </title>
+  <title>Karaoke KFN&MP3  | 7.9.2 </title>
 
 
  <style>
@@ -21537,7 +21537,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "7.9.1",
+    version: "7.9.2",
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
     current_tonic: currentTrackTonic(),
@@ -22443,7 +22443,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "7.9.1";
+const MYNUS_CLIENT_VERSION = "7.9.2";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -26069,11 +26069,166 @@ async function mountPreview780(box,jobId){
   for(const r of records){await localRemember(r);const state=await localPlaylistState();await addProjectToPlaylist(r.id,state.queue.length+1)}
   await refreshFullScreenPlaylist();return {records,errors};
  }
- picker.onchange=async()=>{if(importing||!picker.files.length)return;importing=true;try{const result=await importFiles([...picker.files].filter(file=>pickerKind==='karaoke'?/\.(kfn|mp3|cdg)$/i.test(file.name):/\.(mynus|zip)$/i.test(file.name)));status.textContent='Добавлено в плейлист: '+result.records.length+(result.errors.length?' · Не добавлено: '+result.errors.length:'');status.className='progress-status '+(result.errors.length?'info':'success');if(result.errors.length)window.alert(result.errors.join('\n'))}catch(e){status.textContent=e.message;console.error('Playlist import:',e.message)}finally{importing=false}};
+ picker.onchange=async()=>{
+  if(importing||!picker.files.length)return;
+  importing=true;
+  const names=[...picker.files].map(file=>file.name).join(', ');
+  status.textContent='Loading karaoke: '+names;status.className='progress-status process';
+  console.info('Karaoke loading: '+names);
+  try{
+   const result=await importFiles([...picker.files]);
+   if(result.records.length){
+    const first=result.records[0],state=await localPlaylistState();
+    await loadProjectById(first.id);
+    await markProjectInUse(first.id,state.queue.indexOf(first.id)+1,'takeover');
+    await refreshFullScreenPlaylist();
+    const message='Karaoke loaded: '+first.name+' · Added to playlist: '+result.records.length;
+    status.textContent=message;status.className='progress-status success';console.info(message);
+    window.alert(message+(result.errors.length?'\nNot loaded:\n'+result.errors.join('\n'):''));
+   }else throw Error(result.errors.join('\n')||'No supported karaoke files selected.');
+  }catch(error){
+   const message='Karaoke load error: '+names+' — '+error.message;
+   status.textContent=message;status.className='progress-status error';console.error(message);window.alert(message);
+  }finally{importing=false}
+ };
  function stopCdg(){cdg=null;lastPacket=-1;document.body.classList.remove('mynus-cdg800');document.querySelectorAll('.cdg-surface800').forEach(c=>c.remove())}
  const oldClear=clearProjectState;clearProjectState=function(...args){stopCdg();return oldClear.apply(this,args)};
+async function loadExternalKaraoke792(r){
+ const loaded={master:r.media.master,project:r.project,lyrics:r.lyrics,sequencer:r.project.sequencer||{}};
+ const file={name:r.name};
+      const context = new (window.AudioContext || window.webkitAudioContext)();
+      let audioBuffer;
+
+      try {
+        audioBuffer = await context.decodeAudioData(
+          await loaded.master.arrayBuffer()
+        );
+      } finally {
+        await context.close();
+      }
+
+      if (!Number.isFinite(audioBuffer.duration) || audioBuffer.duration <= 0) {
+        throw new Error("Master audio is invalid.");
+      }
+
+      pauseAll();
+      clearProjectState();
+      clearProjectImage();
+
+
+      // Не объявляем караоке-файл сохранённым серверным проектом.
+      setProjectActive(null);
+
+      masterBlob = loaded.master;
+      savedMasterBlob = loaded.master;
+      waveformData.master = audioBuffer;
+      masterSegments = [{ start: 0, buffer: audioBuffer }];
+      masterDuration = audioBuffer.duration;
+      duration = audioBuffer.duration;
+
+      masterObjectURL = URL.createObjectURL(loaded.master);
+
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => finish(
+          new Error("Master loading timed out.")
+        ), 30000);
+
+        function finish(error) {
+          clearTimeout(timer);
+          masterAudio.removeEventListener("loadedmetadata", ready);
+          masterAudio.removeEventListener("error", failed);
+          if (error) reject(error);
+          else resolve();
+        }
+
+        function ready() { finish(); }
+        function failed() { finish(new Error("Cannot open Master audio.")); }
+
+        masterAudio.addEventListener("loadedmetadata", ready);
+        masterAudio.addEventListener("error", failed);
+        masterAudio.src = masterObjectURL;
+        masterAudio.load();
+      });
+
+      restoreProjectSequencerState(loaded.sequencer);
+
+      // Караоке воспроизводит готовый Master; stems здесь отсутствуют.
+      mode = "master";
+      fragmentStart = null;
+      fragmentEnd = null;
+      loopEnabled = false;
+      projectTrimStart = Math.min(
+        Math.max(0, Number(projectTrimStart) || 0),
+        Math.max(0, duration - 0.001)
+      );
+      if (
+        projectTrimEnd == null ||
+        !Number.isFinite(Number(projectTrimEnd)) ||
+        Number(projectTrimEnd) <= projectTrimStart
+      ) {
+        projectTrimEnd = null;
+      } else {
+        projectTrimEnd = Math.min(duration, Number(projectTrimEnd));
+      }
+
+      restoreProjectToneState(loaded.project);
+      vocalStartTimeRaw = Number.isFinite(loaded.project.vocal_start)
+        ? loaded.project.vocal_start : null;
+      vocalEndTimeRaw = Number.isFinite(loaded.project.vocal_end)
+        ? loaded.project.vocal_end : null;
+      vocalStartTime = vocalStartTimeRaw;
+      vocalEndTime = vocalEndTimeRaw;
+
+      restoreProjectLyricsJson(loaded.lyrics);
+      originalWhisperLyrics = cloneSerializable(lyricsData, {});
+      originalWhisperKaraokeLines = cloneSerializable(karaokeLines, []);
+
+      currentSourceAudioName = loaded.project.source_audio_name || null;
+      fileName.textContent = loaded.project.name || file.name;
+      lyricsFullScreenTrackName.textContent =
+        loaded.project.name || file.name;
+
+      // Ссылка и исходные параметры остаются доступны для восстановления.
+      window.currentMynusKaraoke = {
+        project: loaded.project,
+        sequencer: loaded.sequencer,
+        lyrics: loaded.lyrics, master: loaded.master,
+        original: loaded.project.original || null
+      };
+
+      studio.style.display = "block";
+      await fitEntireProjectTimeline();
+      // pixelsPerSecond is set by fitEntireProjectTimeline above.
+      zoomValue.textContent = pixelsPerSecond.toFixed(1) + " px/s";
+      if (zoomValueTop) zoomValueTop.textContent = zoomValue.textContent;
+      sharedScrollInner.style.width = getTimelineWidth() + "px";
+
+      saveAsMasterBtn.disabled = false;
+      editLyricsBtn.disabled = false;
+
+      renderLyrics();
+      renderLyricsEditor();
+      renderLyricsStructure();
+      updateMasterHistoryButtons();
+      updateCropButtons();
+      updateMixButtons();
+      updateProjectTrimDisplay();
+      drawAllWaveforms();
+      drawMasterTimeline();
+
+      setGlobalCursorTime(getProjectTrimStart());
+      closeKaraokeFinishedDialog();
+      setUiMode(UI_MODE.KARAOKE);
+      window.dispatchEvent(new Event("mynus-karaoke-loaded"));
+
+      status.textContent = "Karaoke loaded: " +
+        (loaded.project.name || file.name);
+      status.className = "progress-status success";
+
+ return true;
+}
  const oldLoad=loadProjectById;loadProjectById=async function(id){
-  const r=await localRecord(id);const result=await oldLoad(id);if(result===false)return result;
+  const r=await localRecord(id);const external=r.karaoke800&&r.karaoke800.kind!=='mynus';const result=external?await loadExternalKaraoke792(r):await oldLoad(id);if(result===false)return result;
   if(r.karaoke800){switchMode('master');window.currentMynusKaraoke={project:r.project,lyrics:r.lyrics,sequencer:r.project.sequencer,master:r.media.master};setUiMode(UI_MODE.KARAOKE);
    if(r.karaoke800.kind==='cdg'){cdg=new formats.Cdg(await r.karaoke800.cdg.arrayBuffer());document.body.classList.add('mynus-cdg800');lastPacket=-1}
   }
