@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>AdminTool | 7.9.0 </title>
+  <title>Karaoke | 7.9.1 </title>
 
 
  <style>
@@ -21537,7 +21537,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "7.9.0",
+    version: "7.9.1",
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
     current_tonic: currentTrackTonic(),
@@ -22443,7 +22443,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "7.9.0";
+const MYNUS_CLIENT_VERSION = "7.9.1";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -24301,7 +24301,7 @@ document.addEventListener("click", event => {
     <div id="saveKaraokeDialog" class="export-dialog"
          style="z-index:10000" role="dialog" aria-modal="true">
       <div class="export-dialog-card">
-        <div class="export-dialog-title">Save Karaoke</div>
+        <div class="export-dialog-title">Save MyNus</div>
 
         <p>Karaoke .mynus file uses the Master track.
            Please check it before saving.</p>
@@ -24400,7 +24400,7 @@ document.addEventListener("click", event => {
   const postplayButton = document.createElement("button");
   postplayButton.type = "button";
   postplayButton.id = "karaokeSaveFileBtn";
-  postplayButton.textContent = "Save Karaoke";
+  postplayButton.textContent = "Save MyNus";
   postplayButton.addEventListener("click", openSaveKaraoke);
   document.getElementById("karaokeLoadAnotherBtn")
     .insertAdjacentElement("afterend", postplayButton);
@@ -24633,7 +24633,7 @@ document.addEventListener("click", event => {
   const button = document.createElement("button");
   button.type = "button";
   button.id = "karaokeLoadFileBtn";
-  button.textContent = "Load Karaoke";
+  button.textContent = "Load MyNus";
   button.disabled = true;
   button.title = "Loading .mynus files is not implemented yet";
 
@@ -24912,6 +24912,18 @@ document.addEventListener("click", event => {
   }
 
   button.addEventListener("click", openKaraokePicker);
+
+  const karaokeButton791 = document.createElement('button');
+  karaokeButton791.type = 'button';
+  karaokeButton791.id = 'karaokeLoadExternalBtn';
+  karaokeButton791.textContent = 'Load Karaoke';
+  karaokeButton791.title = 'KFN or MP3 + CDG';
+  karaokeButton791.addEventListener('click', () => {
+    cancelKaraokePostPlayAutoNext();
+    window.mynusPlaylist800.choose('karaoke');
+  });
+  button.insertAdjacentElement('afterend', karaokeButton791);
+
 
   const topButton = document.getElementById("loadKaraokeTopBtn");
   topButton?.addEventListener("click", openKaraokePicker);
@@ -25928,3 +25940,152 @@ async function mountPreview780(box,jobId){
 })();
 
 </script>
+<style>
+.mynus-cdg800 #lyricsPanel{position:relative;min-height:180px;background:#000;}
+.mynus-cdg800 #karaokeCurrent,.mynus-cdg800 #karaokeNext,.mynus-cdg800 #lyricsFullScreenCurrent,.mynus-cdg800 #lyricsFullScreenNext{visibility:hidden;}
+.mynus-cdg800 .lyrics-fullscreen-lines{min-height:0;height:64vh;top:46%;}
+.cdg-surface800{display:block;width:100%;height:100%;max-height:65vh;aspect-ratio:4/3;object-fit:contain;image-rendering:pixelated;background:#000;}
+.mynus-cdg800 #lyricsPanel>.cdg-surface800{position:absolute;inset:0;}
+.mynus-cdg800 .lyrics-fullscreen-lines>.cdg-surface800{position:absolute;inset:0;}
+</style>
+<script>
+// MyNus 8.0.0 — local karaoke container readers and CD+G decoder.
+(()=>{
+ 'use strict';
+ function text800(bytes){try{return new TextDecoder('utf-8',{fatal:true}).decode(bytes).replace(/^\uFEFF/,'')}catch(_){return new TextDecoder('windows-1251').decode(bytes)}}
+ function ini800(text){const sections={};let section=sections.General={};for(const raw of text.replace(/\r/g,'').split('\n')){const line=raw.trim();if(!line||line.startsWith(';'))continue;if(/^\[.*\]$/.test(line)){section=sections[line.slice(1,-1)]??={};continue}const equal=raw.indexOf('=');if(equal>=0)section[raw.slice(0,equal).trim()]=raw.slice(equal+1)}return sections}
+ function lyrics800(text,duration){
+  const ini=ini800(text),result=[];
+  for(const section of Object.values(ini)){
+   const sync=Object.keys(section).filter(k=>/^Sync\d+$/.test(k)).sort((a,b)=>Number(a.slice(4))-Number(b.slice(4))).flatMap(k=>section[k].split(',').filter(v=>v.trim()).map(v=>Number(v)/100));
+   const texts=Object.keys(section).filter(k=>/^Text\d+$/.test(k)).sort((a,b)=>Number(a.slice(4))-Number(b.slice(4))).map(k=>section[k]);
+   if(!texts.length||!sync.length)continue;
+   const pieces=texts.map(line=>line.trim().split(/\s+/).filter(Boolean).map(word=>word.split('/').filter(Boolean)));
+   if(pieces.flat(2).length!==sync.length)throw Error('KFN: количество таймингов не совпадает с текстом.');
+   if(sync.some((v,i)=>!Number.isFinite(v)||v<0||i>0&&v<sync[i-1]))throw Error('KFN: повреждённые тайминги.');
+   let cursor=0;
+   for(const words of pieces){const line=[];for(const syllables of words){const first=cursor;cursor+=syllables.length;const start=Math.min(duration,sync[first]);const end=Math.min(duration,Math.max(start+.02,sync[cursor]??duration));if(start<duration)line.push({word:syllables.join('').replace(/_/g,' '),start,end})}if(line.length)result.push({start:line[0].start,end:line.at(-1).end,words:line})}
+  }
+  result.sort((a,b)=>a.start-b.start);return {lines:result,structure:[],language:null};
+ }
+ async function ecb800(data,key,length){
+  if(!crypto.subtle||key?.length!==16||data.length%16||!data.length)throw Error('KFN: неподдерживаемая кодировка содержимого.');
+  // WebCrypto supplies CBC: an extra padding block permits unpadded ECB decoding.
+  const aes=await crypto.subtle.importKey('raw',key,'AES-CBC',false,['encrypt','decrypt']);
+  const pad=new Uint8Array(await crypto.subtle.encrypt({name:'AES-CBC',iv:data.slice(-16)},aes,new Uint8Array()));
+  const joined=new Uint8Array(data.length+16);joined.set(data);joined.set(pad,data.length);
+  const plain=new Uint8Array(await crypto.subtle.decrypt({name:'AES-CBC',iv:new Uint8Array(16)},aes,joined));
+  for(let i=16;i<plain.length;i++)plain[i]^=data[i-16];
+  return plain.slice(0,length);
+ }
+ async function kfn800(buffer,zipReader){
+  const bytes=new Uint8Array(buffer);if(bytes.length>256*1024*1024)throw Error('KFN: размер файла превышает 256 МБ.');
+  const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);let p=0,key=null,hint=0;const entries=[];
+  function range(n){if(!Number.isSafeInteger(n)||n<0||p+n>bytes.length)throw Error('KFN: повреждённый контейнер.')}
+  function number(){range(4);const n=view.getUint32(p,true);p+=4;return n}
+  function take(n){range(n);const b=bytes.slice(p,p+n);p+=n;return b}
+  const signature=String.fromCharCode(...take(4));
+  let files;
+  if(signature.startsWith('PK')&&zipReader){files=await zipReader(new Blob([bytes]))}
+  else if(signature==='KFNB'){
+   for(let i=0;;i++){
+    if(i>1024)throw Error('KFN: слишком много полей заголовка.');
+    const tag=String.fromCharCode(...take(4)),flag=take(1)[0],value=number();
+    if(flag===2){const data=take(value);if(tag==='FLID')key=data}else if(flag!==1)throw Error('KFN: неизвестное поле заголовка.');
+    if(tag==='MUSL')hint=value;if(tag==='ENDH')break;
+   }
+   const count=number();if(!count||count>4096)throw Error('KFN: неверное количество вложений.');
+   for(let i=0;i<count;i++){const name=text800(take(number())),type=number(),length=number(),offset=number(),stored=number(),flags=number();entries.push({name,type,length,offset,stored,flags})}
+   const base=p;files=new Map();
+   for(const entry of entries){if(base+entry.offset+entry.stored>bytes.length||entry.length>256*1024*1024)throw Error('KFN: вложение выходит за границы файла.');if(!entry.name.toLowerCase().endsWith('.ini')&&entry.type!==2)continue;
+    const raw=bytes.slice(base+entry.offset,base+entry.offset+entry.stored);const data=entry.flags&1?await ecb800(raw,key,entry.length):raw.slice(0,entry.length);files.set(entry.name,data);
+   }
+  }else throw Error('KFN: этот вариант контейнера пока не поддерживается.');
+  const names=[...files.keys()],song=names.find(n=>n.replace(/\\/g,'/').split('/').at(-1).toLowerCase()==='song.ini');
+  if(!song)throw Error('KFN: не найден Song.ini.');
+  const text=text800(files.get(song)),ini=ini800(text),source=ini.General?.Source?.split(',').slice(2).join(',').trim();
+  const audioName=names.find(n=>source&&n.toLowerCase()===source.toLowerCase())||names.find(n=>/\.(mp3|ogg|wav|m4a)$/i.test(n));
+  if(!audioName)throw Error('KFN: не найдена фонограмма.');
+  const mime=/\.ogg$/i.test(audioName)?'audio/ogg':/\.wav$/i.test(audioName)?'audio/wav':/\.m4a$/i.test(audioName)?'audio/mp4':'audio/mpeg';
+  return {audio:new Blob([files.get(audioName)],{type:mime}),audioName,text,hint,title:ini.General?.Title?.trim()||'',artist:ini.General?.Artist?.trim()||''};
+ }
+ class Cdg800 {
+  constructor(bytes){this.bytes=new Uint8Array(bytes);if(!this.bytes.length||this.bytes.length%24)throw Error('CDG: повреждённая длина файла.');let found=false;for(let p=0;p<this.bytes.length;p+=24)if((this.bytes[p]&63)===9){found=true;break}if(!found)throw Error('CDG: графические команды не найдены.');this.snapshots=new Map();this.reset()}
+  reset(){this.pixels=new Uint8Array(300*216);this.palette=new Uint8Array(16*3);this.index=0;this.transparent=-1;this.hOffset=0;this.vOffset=0}
+  snapshot(){return {pixels:this.pixels.slice(),palette:this.palette.slice(),index:this.index,transparent:this.transparent,hOffset:this.hOffset,vOffset:this.vOffset}}
+  restore(s){this.pixels.set(s.pixels);this.palette.set(s.palette);this.index=s.index;this.transparent=s.transparent;this.hOffset=s.hOffset;this.vOffset=s.vOffset}
+  seek(seconds){const target=Math.min(this.bytes.length/24,Math.max(0,Math.floor(seconds*300)));if(target<this.index){let best=null;for(const s of this.snapshots.values())if(s.index<=target&&(!best||s.index>best.index))best=s;if(best)this.restore(best);else this.reset()}
+   while(this.index<target){this.packet(this.index*24);this.index++;if(this.index%3000===0&&!this.snapshots.has(this.index)){this.snapshots.set(this.index,this.snapshot());if(this.snapshots.size>64)this.snapshots.delete(this.snapshots.keys().next().value)}}return this;
+  }
+  packet(p){const b=this.bytes;if((b[p]&63)!==9)return;const command=b[p+1]&63,d=b.subarray(p+4,p+20);
+   if(command===1){if((d[1]&15)===0)this.pixels.fill(d[0]&15)}
+   else if(command===2){const color=d[0]&15;for(let y=0;y<216;y++)for(let x=0;x<300;x++)if(x<6||x>=294||y<12||y>=204)this.pixels[y*300+x]=color}
+   else if(command===30||command===31){for(let i=0;i<8;i++){const a=d[2*i]&63,z=d[2*i+1]&63,k=((command===31?8:0)+i)*3;this.palette[k]=((a>>2)&15)*17;this.palette[k+1]=(((a&3)<<2)|(z>>4))*17;this.palette[k+2]=(z&15)*17}}
+   else if(command===6||command===38){const x=(d[3]&63)*6,y=(d[2]&31)*12;if(x>294||y>204)return;for(let r=0;r<12;r++)for(let c=0;c<6;c++){const color=d[(d[r+4]&(1<<(5-c)))?1:0]&15,k=(y+r)*300+x+c;if(command===38)this.pixels[k]^=color;else this.pixels[k]=color}}
+   else if(command===28)this.transparent=d[0]&15;
+   else if(command===20||command===24){const h=d[1]&63,v=d[2]&63;this.hOffset=Math.min(5,h&7);this.vOffset=Math.min(11,v&15);const hc=(h>>4)&3,vc=(v>>4)&3,dx=hc===1?6:hc===2?-6:0,dy=vc===1?12:vc===2?-12:0;if(!dx&&!dy)return;const before=this.pixels.slice(),fill=d[0]&15;for(let y=0;y<216;y++)for(let x=0;x<300;x++){const sx=x-dx,sy=y-dy;this.pixels[y*300+x]=command===24?before[((sy+216)%216)*300+(sx+300)%300]:sx<0||sx>=300||sy<0||sy>=216?fill:before[sy*300+sx]}}
+  }
+  rgba(){const image=new Uint8ClampedArray(288*192*4);for(let y=0;y<192;y++)for(let x=0;x<288;x++){const color=this.pixels[(y+12+this.vOffset)*300+x+6+this.hOffset],k=(y*288+x)*4;image[k]=this.palette[color*3];image[k+1]=this.palette[color*3+1];image[k+2]=this.palette[color*3+2];image[k+3]=color===this.transparent?0:255}return image}
+ }
+ window.mynusFormats800={kfn:kfn800,lyrics:lyrics800,Cdg:Cdg800,ini:ini800};
+})();
+
+</script>
+<script>
+(()=>{
+ const formats=window.mynusFormats800;let importing=false,cdg=null,lastPacket=-1;
+ const picker=document.createElement('input');picker.type='file';picker.multiple=true;picker.hidden=true;picker.accept='.mynus,.zip';document.body.append(picker);
+ function base(name){return name.replace(/\.(mp3|cdg)$/i,'').normalize('NFC').toLowerCase()}
+ let pickerKind='mynus';
+ function choose(kind='mynus'){if(importing||projectLoading||activeSeparation)return;pickerKind=kind;picker.accept=kind==='karaoke'?'.kfn,.mp3,.cdg':'.mynus,.zip';picker.value='';picker.click()}
+ async function audioDuration(blob){const ctx=new(window.AudioContext||window.webkitAudioContext)();try{return(await ctx.decodeAudioData(await blob.arrayBuffer())).duration}finally{await ctx.close()}}
+ async function record(name,master,lyrics,kind,extra={}){
+  const id=crypto.randomUUID(),project={name,source_audio_name:name,tracks:{original:name},sequencer:{mode:'master',playback_groups:[]}};
+  return {id,name,project,lyrics,media:{original:master,master},filePath:'',karaoke800:{kind,...extra}};
+ }
+ async function importMynus(file){
+  const isJson=(await file.slice(0,256).text()).replace(/^\uFEFF/,'').trimStart().startsWith('{');
+  if(!isJson){const entries=await localReadProjectArchive(file);if(entries.has('Project.json')){const data=JSON.parse(new TextDecoder().decode(entries.get('Project.json')));if(data.format==='MyNus Project')return localImportProject(file)}}
+  const loaded=await window.mynusReadKaraoke800(file);await audioDuration(loaded.master);
+  const r=await record(loaded.project.name||file.name,loaded.master,loaded.lyrics,'mynus');r.project={...loaded.project,tracks:{...loaded.project.tracks,original:loaded.project.source_audio_name||file.name},sequencer:loaded.sequencer};return r;
+ }
+ async function importFiles(files){
+  const errors=[],records=[],pairs=new Map();
+  for(const file of files){
+   const extension=file.name.split('.').at(-1).toLowerCase();
+   if(extension==='mp3'||extension==='cdg'){const key=base(file.name),pair=pairs.get(key)||{};if(pair[extension])errors.push('Дублирующий файл: '+file.name);else pair[extension]=file;pairs.set(key,pair);continue}
+   try{if(extension==='kfn'){
+     const data=await formats.kfn(await file.arrayBuffer(),localReadProjectArchive),duration=await audioDuration(data.audio);
+     const lyrics=formats.lyrics(data.text,duration);if(!lyrics.lines.length)throw Error('KFN: нет синхронизированного текста.');
+     records.push(await record(file.name.replace(/\.kfn$/i,''),data.audio,lyrics,'kfn'));
+    }else if(extension==='mynus'||extension==='zip')records.push(await importMynus(file));else throw Error('Неподдерживаемый формат.');
+   }catch(e){errors.push(file.name+': '+e.message)}
+  }
+  for(const pair of pairs.values())try{
+   if(!pair.mp3||!pair.cdg)throw Error('Выберите MP3 и CDG с одинаковым именем вместе.');
+   const bytes=await pair.cdg.arrayBuffer();new formats.Cdg(bytes);await audioDuration(pair.mp3);
+   records.push(await record(pair.mp3.name.replace(/\.mp3$/i,''),pair.mp3,{lines:[],structure:[]},'cdg',{cdg:new Blob([bytes],{type:'application/x-cdg'})}));
+  }catch(e){errors.push((pair.mp3||pair.cdg).name+': '+e.message)}
+  for(const r of records){await localRemember(r);const state=await localPlaylistState();await addProjectToPlaylist(r.id,state.queue.length+1)}
+  await refreshFullScreenPlaylist();return {records,errors};
+ }
+ picker.onchange=async()=>{if(importing||!picker.files.length)return;importing=true;try{const result=await importFiles([...picker.files].filter(file=>pickerKind==='karaoke'?/\.(kfn|mp3|cdg)$/i.test(file.name):/\.(mynus|zip)$/i.test(file.name)));status.textContent='Добавлено в плейлист: '+result.records.length+(result.errors.length?' · Не добавлено: '+result.errors.length:'');status.className='progress-status '+(result.errors.length?'info':'success');if(result.errors.length)window.alert(result.errors.join('\n'))}catch(e){status.textContent=e.message;console.error('Playlist import:',e.message)}finally{importing=false}};
+ function stopCdg(){cdg=null;lastPacket=-1;document.body.classList.remove('mynus-cdg800');document.querySelectorAll('.cdg-surface800').forEach(c=>c.remove())}
+ const oldClear=clearProjectState;clearProjectState=function(...args){stopCdg();return oldClear.apply(this,args)};
+ const oldLoad=loadProjectById;loadProjectById=async function(id){
+  const r=await localRecord(id);const result=await oldLoad(id);if(result===false)return result;
+  if(r.karaoke800){switchMode('master');window.currentMynusKaraoke={project:r.project,lyrics:r.lyrics,sequencer:r.project.sequencer,master:r.media.master};setUiMode(UI_MODE.KARAOKE);
+   if(r.karaoke800.kind==='cdg'){cdg=new formats.Cdg(await r.karaoke800.cdg.arrayBuffer());document.body.classList.add('mynus-cdg800');lastPacket=-1}
+  }
+  return result;
+ };
+ function surface(host){if(!host)return null;let canvas=host.querySelector('.cdg-surface800');if(!canvas){canvas=document.createElement('canvas');canvas.className='cdg-surface800';canvas.width=288;canvas.height=192;canvas.setAttribute('aria-label','CDG karaoke graphics');host.append(canvas)}return canvas}
+ function frame(){requestAnimationFrame(frame);if(!cdg)return;const targets=[surface(lyricsPanel),surface(lyricsFullScreenCurrent.parentElement)];cdg.seek(getCurrentTime());if(cdg.index===lastPacket&&targets.every(c=>c?.dataset.ready==='1'))return;lastPacket=cdg.index;const image=new ImageData(cdg.rgba(),288,192);for(const canvas of targets)if(canvas){canvas.getContext('2d').putImageData(image,0,0);canvas.dataset.ready='1'}}
+ requestAnimationFrame(frame);
+ window.mynusPlaylist800={choose,importFiles,stopCdg};
+})();
+
+</script>
+
+</body>
+</html>
