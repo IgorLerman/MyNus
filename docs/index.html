@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>TrackHeads fix  | 7.9.4 </title>
+  <title>Silence  | 7.9.5 </title>
 
 
  <style>
@@ -3594,6 +3594,22 @@ html.mynus-native-header #mnConsoleButton,html.mynus-native-header #mnLoginButto
 .track.track-collapsed .track-title{display:block!important;height:20px;line-height:20px;margin:0}
 .track.track-collapsed .track-title>button,.track.track-collapsed .track-title>.track-buttons,.track.track-collapsed .master-groups793,.track.track-collapsed .master-rec-commit-buttons{display:none!important}
 .track.track-collapsed>.track-visibility{top:5px;bottom:auto}
+
+</style>
+<style>
+.app{margin-top:6px}
+#studio{margin-top:6px}.studio-tools{display:grid;grid-template-columns:190px minmax(0,1fr);gap:12px;align-items:end;margin:0 0 2px}.studio-tools .sequencer-history-block{margin:0}.studio-tools>.transport-counter-line{display:block;min-width:0}.studio-tools .transport-counter-spacer{display:none}
+.transport-stack.transport-top{margin:2px 0;gap:2px}.transport-stack.transport-bottom{margin:2px 0!important;gap:2px}
+.master-timeline-heading{display:grid;grid-template-columns:190px minmax(0,1fr);gap:12px;margin:2px 0;min-height:16px}.master-timeline-heading .master-timeline-title{grid-column:2;width:100%;margin:0;text-align:center}
+.master-timeline-row>.track-info-left{display:block;align-self:center}.master-timeline-row .rec-history781{width:190px;margin:0}.master-timeline,.master-timeline-inner{height:98px}
+.shared-scroll-row{margin-top:0}.shared-scroll{height:6px}.selection-info{margin-top:0;min-height:12px;line-height:12px;font-size:10px}
+.transport-bottom .shortcut-legend{gap:3px}.transport-bottom #resetBtn,.transport-bottom #saveProjectBtn{padding:4px 5px;font-size:9px}.transport-bottom .shortcut-help-button{min-width:40px;padding:4px;font-size:9px}
+.track-controls:has(>.track-title>.collapsed-track-buttons){grid-template-areas:"title title" "volume volume" "save save"}
+.track-controls>.track-title:has(>.collapsed-track-buttons){display:flex;align-items:center;gap:3px;width:100%}.track-title>.collapsed-track-buttons{display:flex;width:auto;margin-left:auto;gap:3px}.track-title>.collapsed-track-buttons button{height:20px;padding:2px 5px;line-height:14px;font-size:10px}
+.track.track-collapsed .track-title:has(>.collapsed-track-buttons){display:flex!important;align-items:center}.track.track-collapsed .track-title>.collapsed-track-buttons{display:flex!important;width:auto;flex:1 1 auto;min-width:0}
+canvas,.master-timeline-inner,.playhead,.master-cursor{cursor:pointer}.playhead,.master-cursor{pointer-events:auto;touch-action:none}.playhead::before,.master-cursor::before{content:"";position:absolute;top:0;bottom:0;left:-4px;right:-4px}
+.selection-range,.project-trim-handle,.project-fade-handle,.project-trim-marker{cursor:ew-resize!important}
+.silence793{cursor:default;touch-action:none}.silence-edge{position:absolute;top:0;bottom:0;width:7px;cursor:ew-resize;z-index:3}.silence-edge.left{left:0}.silence-edge.right{right:0}
 
 </style>
 </head>
@@ -11264,7 +11280,7 @@ function createFxChain(
   }
 
   const panner =
-    createPan780(mixAudioContext);
+    target==='microphone'?createMicrophonePan795(mixAudioContext):createPan780(mixAudioContext);
 
 
   const compressor =
@@ -13169,7 +13185,7 @@ async function getTrackBlob(track) {
 
 // Работа с аудиодорожкой и её состоянием.
 // Rubber Band is loaded once from rubberband.js.
-function createExportFxChain(inputNode, audioContext) {
+function createExportFxChain(inputNode, audioContext, track = '') {
 
   const definitions = [
     ["lowshelf", 80, 0],
@@ -13219,7 +13235,7 @@ function createExportFxChain(inputNode, audioContext) {
   }
 
   const panner =
-    createPan780(audioContext);
+    track==='microphone'?createMicrophonePan795(audioContext):createPan780(audioContext);
 
 
   const compressor =
@@ -13502,7 +13518,7 @@ async function exportTrack(track,scope,format='wav'){
    if(crop.out!=null)level.gain.setValueAtTime(0,Math.max(0,Number(crop.out)));
   }
   if(track!=='original'&&fxSettings[track]){
-   const chain=createExportFxChain(level,offline);
+   const chain=createExportFxChain(level,offline,track);
    applyExportFxSettings(lyricsCopy(fxSettings[track]),chain);chain.output.connect(offline.destination);
   }else level.connect(offline.destination);
   node.start();
@@ -20003,6 +20019,7 @@ else {
 
   const counterText =
 
+    "Total: " + formatTime(duration) + " / " +
     formatTime(
       current
     )
@@ -21564,7 +21581,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "7.9.4",
+    version: "7.9.5",
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
     current_tonic: currentTrackTonic(),
@@ -22438,6 +22455,8 @@ projectFadeStart =
     ? Number(saved.fadeStart)
     : null;
   if (["original", "mix", "master"].includes(saved.mode)) mode = saved.mode;
+  syncTrackLevelUi795();
+
 }
 
 // Сохранение текущего Project и связанных данных.
@@ -22471,7 +22490,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "7.9.4";
+const MYNUS_CLIENT_VERSION = "7.9.5";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -26271,7 +26290,7 @@ async function loadExternalKaraoke792(r){
 </script>
 
 <script>
-// MyNus 7.9.4: non-destructive Silence, compact track heads and level controls.
+// MyNus 7.9.5: non-destructive Silence, compact track heads and level controls.
 const outputLevels793={L:1,R:1};let outputBus793=null;
 function outputDestination793(){
  if(outputBus793?.context===mixAudioContext)return outputBus793.input;
@@ -26296,7 +26315,7 @@ function silenceBuffer793(buffer,track,context){const ranges=silenceRanges793(tr
  function export793(track){exportTargetTrack=track;exportTargetScope=scope();masterExportDialog.classList.add('open');}
  function controls(track){return row(track)?.querySelector('.track-controls');}
  function update(){for(const {track,kind,b} of actions){const selected=hasSelection();b.title=kind+' '+(selected?'Selection':'Track');if(track==='original')b.textContent=b.title;const available=track==='original'?!!(currentOriginalTrackFile||currentOriginalFile):track==='master'?!!masterBlob:!!waveformData[track];b.disabled=!available||masterRecording||masterRecordArmed||rec780.busy;}}
- function paint(){for(const track of [...stemIds,'master']){const timeline=track==='master'?$('masterTrackTimeline'):timelines[track];if(!timeline)continue;const crop=stemCrop[track],end=waveformData[track]?.duration||duration;if(crop&&end>0&&(crop.in>0||crop.out!=null)){const ranges=[...silenceRanges793(track)];if(crop.in>0)ranges.push([0,Math.min(end,crop.in)]);if(crop.out!=null&&crop.out<end)ranges.push([Math.max(0,crop.out),end]);crop.silences=mergeSilence793(ranges);crop.in=0;crop.out=null;updateCropMasks();}timeline.querySelectorAll('.silence793').forEach(n=>n.remove());for(const [a,b] of silenceRanges793(track)){const mask=document.createElement('div');mask.className='silence793';mask.style.left=a*pixelsPerSecond+'px';mask.style.width=(b-a)*pixelsPerSecond+'px';mask.title='Double-click to restore sound';mask.addEventListener('dblclick',e=>{e.preventDefault();e.stopPropagation();pushSequencerHistorySnapshot();stemCrop[track].silences=silenceRanges793(track).filter(r=>r[0]!==a||r[1]!==b);applyMix();paint();});timeline.append(mask);}}}
+ function paint(){for(const track of [...stemIds,'master']){const timeline=track==='master'?$('masterTrackTimeline'):timelines[track];if(!timeline)continue;const crop=stemCrop[track],end=waveformData[track]?.duration||duration;if(crop&&end>0&&(crop.in>0||crop.out!=null)){const ranges=[...silenceRanges793(track)];if(crop.in>0)ranges.push([0,Math.min(end,crop.in)]);if(crop.out!=null&&crop.out<end)ranges.push([Math.max(0,crop.out),end]);crop.silences=mergeSilence793(ranges);crop.in=0;crop.out=null;updateCropMasks();}timeline.querySelectorAll('.silence793').forEach(n=>n.remove());for(const [a,b] of silenceRanges793(track)){const mask=document.createElement('div');mask.className='silence793';mask.style.left=a*pixelsPerSecond+'px';mask.style.width=(b-a)*pixelsPerSecond+'px';mask.title='Double-click to restore sound';bindSilence795(mask,track,a,b);mask.addEventListener('dblclick',e=>{e.preventDefault();e.stopPropagation();pushSequencerHistorySnapshot();stemCrop[track].silences=silenceRanges793(track).filter(r=>r[0]!==a||r[1]!==b);applyMix();paint();});timeline.append(mask);}}}
  function silence(track){const end=waveformData[track]?.duration||duration;if(!end)return;pushSequencerHistorySnapshot();stemCrop[track].silences=mergeSilence793([...silenceRanges793(track),hasSelection()?[Math.max(0,fragmentStart),Math.min(end,fragmentEnd)]:[0,end]]);applyMix();paint();}
  async function clear(track){if(!hasSelection()){await clearRec780(track);return;}if(masterRecording||masterRecordArmed||rec780.busy)return;const a=fragmentStart,b=fragmentEnd,next=[];pushRec780(track);rec780.busy=true;updateRecControls780();try{for(const segment of recordingSegments780(track)){const end=segment.start+segment.buffer.duration;for(const [left,right] of [[segment.start,Math.min(end,a)],[Math.max(segment.start,b),end]]){if(right<=left)continue;const buffer=segment.buffer,first=Math.round((left-segment.start)*buffer.sampleRate),last=Math.min(buffer.length,Math.round((right-segment.start)*buffer.sampleRate));if(last<=first)continue;const part=new AudioBuffer({length:last-first,numberOfChannels:buffer.numberOfChannels,sampleRate:buffer.sampleRate});for(let ch=0;ch<part.numberOfChannels;ch++)part.copyToChannel(buffer.getChannelData(ch).subarray(first,last),ch);next.push({start:left,buffer:part});}}
  if(track==='master'){masterSegments=next;await restoreMasterFromSegments();}else{rec780.micSegments=next;await rebuildMic780();}
@@ -26342,6 +26361,47 @@ function silenceBuffer793(buffer,track,context){const ranges=silenceRanges793(tr
   const track=timeline.closest('.track'),button=document.createElement('button');button.type='button';button.className='track-visibility';button.textContent='Hide';button.title='Collapse track';button.setAttribute('aria-expanded','true');
   button.onclick=e=>{e.stopPropagation();const collapsed=track.classList.toggle('track-collapsed');button.textContent=collapsed?'Show':'Hide';button.title=collapsed?'Expand track':'Collapse track';button.setAttribute('aria-expanded',String(!collapsed));};track.append(button);
  }
+})();
+
+</script>
+<script>
+// MyNus 7.9.5: consistent track state, mono input pan and timeline interactions.
+var microphoneChannelCache795;
+function microphoneChannel795(){microphoneChannelCache795??=new WeakMap();const b=waveformData.microphone;if(!b||b.numberOfChannels<2)return 0;if(microphoneChannelCache795.has(b))return microphoneChannelCache795.get(b);const energy=[0,0];for(let ch=0;ch<2;ch++){const data=b.getChannelData(ch);for(let i=0;i<data.length;i+=32)energy[ch]+=data[i]*data[i];}const channel=energy[1]>energy[0]?1:0;microphoneChannelCache795.set(b,channel);return channel;}
+function createMicrophonePan795(context){
+ const input=context.createGain(),split=context.createChannelSplitter(2),mono=context.createGain(),pan=context.createStereoPanner(),gains=[context.createGain(),context.createGain()];mono.channelCount=1;mono.channelCountMode='explicit';mono.channelInterpretation='discrete';input.connect(split);gains.forEach((g,i)=>{split.connect(g,i);g.connect(mono);});mono.connect(pan);
+ const select=()=>{const channel=microphoneChannel795();gains.forEach((g,i)=>g.gain.setValueAtTime(i===channel?1:0,context.currentTime));};
+ Object.defineProperty(input,'pan',{value:{get value(){return pan.pan.value},set value(v){select();pan.pan.value=Math.max(-1,Math.min(1,Number(v)||0));},setValueAtTime(v,t){select();pan.pan.setValueAtTime(Math.max(-1,Math.min(1,Number(v)||0)),t);return this;}}});
+ input.connect=(...args)=>pan.connect(...args);input.disconnect=(...args)=>pan.disconnect(...args);select();return input;
+}
+function syncTrackLevelUi795(){for(const id of stemIds){const n=Number(stemState[id]?.volume),level=Number.isFinite(n)?Math.max(0,Math.min(1,n)):1;stemState[id].volume=level;if(stemVolumeControls[id])stemVolumeControls[id].value=String(Math.round(level*100));if(stemVolumeValues[id])stemVolumeValues[id].textContent=Math.round(level*100)+'%';}updateMixButtons();}
+function silenceEditRange795(original,kind,delta,limit,minLength){let [a,b]=original;minLength=Math.min(minLength,b-a);if(kind==='left')a=Math.max(0,Math.min(b-minLength,a+delta));else if(kind==='right')b=Math.min(limit,Math.max(a+minLength,b+delta));else{delta=Math.max(-a,Math.min(limit-b,delta));a+=delta;b+=delta;}return [a,b];}
+function bindSilence795(mask,track,a,b){
+ mask.style.cursor='default';mask.style.touchAction='none';for(const side of ['left','right']){const edge=document.createElement('span');edge.className='silence-edge '+side;edge.dataset.silenceEdge=side;mask.append(edge);}
+ let drag=null,suppressDoubleClick=false;
+ mask.addEventListener('pointerdown',e=>{if(e.button!==0)return;e.preventDefault();e.stopPropagation();const rect=mask.getBoundingClientRect(),kind=e.target.dataset?.silenceEdge||(e.clientX-rect.left<=6?'left':rect.right-e.clientX<=6?'right':'move');drag={x:e.clientX,kind,range:[a,b],current:[a,b],moved:false,index:silenceRanges793(track).findIndex(r=>r[0]===a&&r[1]===b),pointer:e.pointerId};mask.setPointerCapture(e.pointerId);});
+ mask.addEventListener('pointermove',e=>{if(!drag)return;e.preventDefault();e.stopPropagation();if(!drag.moved&&Math.abs(e.clientX-drag.x)<2)return;if(!drag.moved){pushSequencerHistorySnapshot();drag.moved=true;}const limit=waveformData[track]?.duration||duration,pair=silenceEditRange795(drag.range,drag.kind,(e.clientX-drag.x)/pixelsPerSecond,limit,Math.max(1/(waveformData[track]?.sampleRate||48000),1/pixelsPerSecond));drag.current=pair;stemCrop[track].silences[drag.index]=pair;mask.style.left=pair[0]*pixelsPerSecond+'px';mask.style.width=(pair[1]-pair[0])*pixelsPerSecond+'px';applyMix();});
+ function finish(e,cancel){if(!drag)return;e.stopPropagation();const d=drag;drag=null;if(mask.hasPointerCapture(e.pointerId))mask.releasePointerCapture(e.pointerId);if(!d.moved)return;suppressDoubleClick=true;if(cancel)stemCrop[track].silences[d.index]=d.range;else stemCrop[track].silences=mergeSilence793(silenceRanges793(track));drawAllWaveforms();applyMix();}
+ mask.addEventListener('pointerup',e=>finish(e,false));mask.addEventListener('pointercancel',e=>finish(e,true));
+ mask.addEventListener('dblclick',e=>{if(suppressDoubleClick){e.preventDefault();e.stopImmediatePropagation();}},true);
+}
+(()=>{
+ const $=id=>document.getElementById(id),reset=$('resetBtn'),save=$('saveProjectBtn'),rec=document.querySelector('.rec-history781'),oldRec=rec?.parentElement,left=document.querySelector('.master-timeline-row>.track-info-left');
+ const counter=document.querySelector('.transport-top .transport-counter-line'),tools=document.querySelector('.studio-tools');if(counter&&tools)tools.append(counter);
+ if(reset&&save){reset.classList.add('project-side-btn');save.before(reset);}if(rec&&left){left.replaceChildren(rec);if(oldRec?.classList.contains('rec-shared781'))oldRec.remove();}
+ // Total is included in both timecode displays by updateTimeDisplay.
+ syncTrackLevelUi795();updateTimeDisplay();
+ // Keep Mute/Solo visible inside the single collapsed title row.
+ for(const track of document.querySelectorAll('.track:has(>.timeline-scroll)')){const title=track.querySelector('.track-title'),head=track.querySelector('.track-controls');if(!title||!head)continue;const buttons=[...head.querySelectorAll('.track-buttons')].find(n=>n.querySelector('[id$="MuteBtn"]'));if(buttons){buttons.classList.add('collapsed-track-buttons');if(buttons.parentElement===head)title.append(buttons);}}
+ // Playheads have their own drag gesture; regular field clicks retain existing seek behaviour.
+ for(const marker of [...document.querySelectorAll('.playhead'),$('masterCursor')].filter(Boolean)){
+  let dragging=false;marker.addEventListener('pointerdown',e=>{if(e.button!==0||!duration)return;e.preventDefault();e.stopImmediatePropagation();dragging=true;marker.setPointerCapture(e.pointerId);});
+  const move=e=>{if(!dragging)return;e.preventDefault();e.stopImmediatePropagation();const timeline=marker.parentElement,rect=timeline.getBoundingClientRect(),t=(e.clientX-rect.left)/rect.width*duration;setGlobalCursorTime(Math.max(getProjectTrimStart(),Math.min(getProjectTrimEnd(),t)));};
+  marker.addEventListener('pointermove',move);marker.addEventListener('pointerup',e=>{if(!dragging)return;move(e);dragging=false;if(marker.hasPointerCapture(e.pointerId))marker.releasePointerCapture(e.pointerId);});marker.addEventListener('pointercancel',()=>dragging=false);
+ }
+ masterTimelineInner.addEventListener('pointermove',e=>{if(selectionDragging)return;const rect=masterTimelineInner.getBoundingClientRect(),x=e.clientX-rect.left;const within=hasSelection()&&x>=fragmentStart/duration*rect.width-8&&x<=fragmentEnd/duration*rect.width+8;masterTimelineInner.style.cursor=within?'ew-resize':'pointer';});
+ document.querySelectorAll('.silence793').forEach(mask=>{ /* Existing masks will be rebuilt by the shared painter below. */ });
+ drawAllWaveforms();
 })();
 
 </script>
