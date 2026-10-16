@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>Silence  | 7.9.5 </title>
+  <title>KeyFix | 7.9.6 </title>
 
 
  <style>
@@ -3612,6 +3612,34 @@ canvas,.master-timeline-inner,.playhead,.master-cursor{cursor:pointer}.playhead,
 .silence793{cursor:default;touch-action:none}.silence-edge{position:absolute;top:0;bottom:0;width:7px;cursor:ew-resize;z-index:3}.silence-edge.left{left:0}.silence-edge.right{right:0}
 
 </style>
+<style id="stylesUi796">
+/* Selected effect targets and active playback groups. */
+.fx-target-grid button.active,.fx-generated796 button.active,#fxTargetMasterBtn.active,
+.transport-proxy[data-mode].active,.transport-proxy[data-proxy="effectsModeBtn"].active,.transport-proxy[data-proxy="inputsModeBtn"].active,
+#originalModeBtn.active,#mixModeBtn.active,#effectsModeBtn.active,#inputsModeBtn.active,#masterModeBtn.active,
+.master-groups793 button.active,.track-controls button[id$="SoloBtn"].active{background:#b6d7b8!important;color:#173b22!important}
+.track-numberUi796{flex:0 0 auto;display:inline-block;font:700 9px Consolas,monospace;color:#637567;margin-right:2px}
+.track-controls>.track-title:has(>.collapsed-track-buttons){gap:2px}
+.track-title>.collapsed-track-buttons{flex:0 0 auto;gap:3px}
+.track-title>.collapsed-track-buttons button,.master-title-row>.track-buttons button{width:46px!important;flex:0 0 46px;min-width:46px;height:20px;min-height:20px;padding:2px 4px;box-sizing:border-box;font-size:10px;line-height:14px}
+.track-controls .track-title{min-width:0;font-size:10px}
+.track-controls .master-title-row{gap:2px;font-size:10px}
+.track-controls .master-title-row>.track-nameUi796{flex:0 0 auto;min-width:0}
+.track-controls .master-groups793{gap:2px;flex:1 1 auto}
+.track-controls .master-groups793 button{padding:2px 1px;font-size:8px;min-width:0}
+.track:has(.timeline-scroll[data-track="original"]) .track-title>.original-exportUi796{margin-left:auto;width:108px;max-width:108px;flex:0 0 108px;height:20px;min-height:20px;padding:2px 4px;font-size:10px;line-height:14px}
+.track:has(.timeline-scroll[data-track="original"]) .track-title{gap:2px}
+#fxProcessUi796{display:block;color:#36533a;font-size:12px;overflow-wrap:anywhere}
+#fxProcessUi796.error{color:#b22222}
+/* Meter borders match the full visible slider scale, including its lower edge. */
+#lyricsFullScreenView .fs-meter770,#lyricsFullScreenView .fs-stereo780{box-sizing:border-box}
+#lyricsFullScreenView .fs-stereo780 .fs-meter770{position:relative}
+#lyricsFullScreenView .fs-meter770>span:first-child{position:absolute;bottom:100%;left:0;width:100%;text-align:center}
+#lyricsFullScreenView .fs-meter770>.meter-number770{position:absolute;top:100%;left:50%;transform:translateX(-50%);width:max-content;text-align:center}
+#lyricsFullScreenView .fs-meter770 .meter-scale770{box-sizing:border-box;margin:0;min-height:0;max-height:none;flex:0 0 auto}
+.fx-generated796{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;margin-bottom:4px}.fx-generated796 button{min-width:0;padding:4px 2px;font-size:10px}
+
+</style>
 </head>
 
 
@@ -4791,7 +4819,7 @@ canvas,.master-timeline-inner,.playhead,.master-cursor{cursor:pointer}.playhead,
 
         </div>
 
-        <div class="fx-target-master-row"><button id="fxTargetMicrophoneBtn" disabled>Microphone</button></div>
+        <div class="fx-generated796"><button id="fxTargetMicrophoneBtn" disabled>Microphone</button><button id="fxTargetPitch796" disabled>Pitch</button><button id="fxTargetHarmon796" disabled>Harmonizer</button></div>
         <div class="fx-target-master-row">
 
           <button id="fxTargetMasterBtn">
@@ -10385,6 +10413,7 @@ function updateEffectiveVocalRange() {
 // ========================================
 
 const fxTargetButtons = {
+ pitchCorrection:document.getElementById("fxTargetPitch796"), harmonizer:document.getElementById("fxTargetHarmon796"),
   microphone: document.getElementById("fxTargetMicrophoneBtn"),
 
   vocals:
@@ -13717,9 +13746,9 @@ async function installGeneratedTrack(
 
 }
 
-createPitchCorrectionBtn.addEventListener("click", async () => {
+async function createPitchUi796() {
   try {
-    createPitchCorrectionBtn.disabled = true; status.textContent = "Creating Pitch Correction track...";
+    createPitchCorrectionBtn.disabled = true; fxProcessUi796("Creating 8 · Pitch..."); status.textContent = "Creating Pitch Correction track...";
     const source = await decodeMicrophoneBuffer();
     const mono = source.getChannelData(0);
     const sampleRate = source.sampleRate;
@@ -13753,23 +13782,25 @@ createPitchCorrectionBtn.addEventListener("click", async () => {
     const correction = offsets.length ? offsets[Math.floor(offsets.length / 2)] : 0;
     const corrected = await makeShiftedBuffer(source, Math.max(-0.5, Math.min(0.5, correction)));
     await installGeneratedTrack("pitchCorrection", corrected);
-    status.textContent = "Pitch Correction track created";
+    fxProcessUi796("8 · Pitch created"); status.textContent = "Pitch Correction track created";
     status.className = "progress-status success";
-  } catch (error) { console.error(error); status.textContent = "Pitch Correction error: " + error.message; }
+  } catch (error) { fxProcessUi796("8 · Pitch creation failed: "+error.message,true); status.textContent = "Pitch Correction error: " + error.message; }
   finally { createPitchCorrectionBtn.disabled = false; }
-});
+}
+createPitchCorrectionBtn.addEventListener("click", createPitchUi796);
 
-createHarmonizerBtn.addEventListener("click", async () => {
+async function createHarmonUi796() {
   try {
-    createHarmonizerBtn.disabled = true; status.textContent = "Creating Vocal Harmonizer track...";
+    createHarmonizerBtn.disabled = true; fxProcessUi796("Creating 9 · Harmonizer..."); status.textContent = "Creating Vocal Harmonizer track...";
     const source = await decodeMicrophoneBuffer();
     const harmony = await makeHarmonizerBuffer(source);
     await installGeneratedTrack("harmonizer", harmony);
-    status.textContent = "Vocal Harmonizer track created";
+    fxProcessUi796("9 · Harmonizer created"); status.textContent = "Vocal Harmonizer track created";
     status.className = "progress-status success";
-  } catch (error) { console.error(error); status.textContent = "Vocal Harmonizer error: " + error.message; }
+  } catch (error) { fxProcessUi796("9 · Harmonizer creation failed: "+error.message,true); status.textContent = "Vocal Harmonizer error: " + error.message; }
   finally { createHarmonizerBtn.disabled = false; }
-});
+}
+createHarmonizerBtn.addEventListener("click", createHarmonUi796);
 
 // Работа с аудиодорожкой и её состоянием.
 function stemTrackIsAvailable(
@@ -21031,20 +21062,12 @@ function seekBy(
 // Отдельное переключение Tab: Lyrics Editor <-> Full Screen Karaoke.
 // Фаза capture не позволяет браузеру переводить фокус и не даёт активному элементу
 // перехватить Tab до обработки MyNus.
-window.addEventListener(
-  "keydown",
-  event => {
-    const isTab = event.key === "Tab" || event.code === "Tab";
-    if (!isTab) return;
-
-    if (!isLyricsUiOpen()) return;
-
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    setUiMode(isKaraokeUiMode() ? UI_MODE.LYRICS : UI_MODE.KARAOKE);
-  },
-  true
-);
+window.addEventListener("keydown", event => {
+ const tab=event.key==='Tab'||event.code==='Tab',esc=event.key==='Escape';
+ if(!isLyricsUiOpen()||(!tab&&!esc)||event.ctrlKey||event.altKey||event.metaKey)return;
+ event.preventDefault();event.stopImmediatePropagation();
+ if(!event.repeat)setUiMode(esc?UI_MODE.SEQUENCER:(isKaraokeUiMode()?UI_MODE.LYRICS:UI_MODE.KARAOKE));
+},true);
 
 
 window.addEventListener(
@@ -21581,7 +21604,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "7.9.5",
+    version: "7.9.6",
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
     current_tonic: currentTrackTonic(),
@@ -22490,7 +22513,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "7.9.5";
+const MYNUS_CLIENT_VERSION = "7.9.6";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -25724,8 +25747,8 @@ async function waitForPaidResult760(data,run){
  monitor.onclick=()=>{monitoring=!monitoring;monitorState();};
  lyricsFullScreenMicRange?.addEventListener('input',gain);
  $('micCreate770').onclick=()=>{
-  created=true;$('microphoneTrackRow').style.display='grid';$('fxTargetMicrophoneBtn').disabled=false;
-  $('micCreate770').disabled=true;monitorState();drawAllWaveforms();ensureProjectTrimTrackOverlays();say('Track created');
+  fxProcessUi796('Creating 7 · Microphone...');created=true;$('microphoneTrackRow').style.display='grid';$('fxTargetMicrophoneBtn').disabled=false;
+  $('micCreate770').disabled=true;monitorState();drawAllWaveforms();ensureProjectTrimTrackOverlays();say('Track created');fxProcessUi796('7 · Microphone created');
  };
  $('micRecord770').onclick=()=>startMasterRecording('microphone');
  $('micStopRecord770').onclick=()=>stopMasterRecording();
@@ -26290,7 +26313,7 @@ async function loadExternalKaraoke792(r){
 </script>
 
 <script>
-// MyNus 7.9.5: non-destructive Silence, compact track heads and level controls.
+// MyNus 7.9.6: non-destructive Silence, compact track heads and level controls.
 const outputLevels793={L:1,R:1};let outputBus793=null;
 function outputDestination793(){
  if(outputBus793?.context===mixAudioContext)return outputBus793.input;
@@ -26365,7 +26388,7 @@ function silenceBuffer793(buffer,track,context){const ranges=silenceRanges793(tr
 
 </script>
 <script>
-// MyNus 7.9.5: consistent track state, mono input pan and timeline interactions.
+// MyNus 7.9.6: consistent track state, mono input pan and timeline interactions.
 var microphoneChannelCache795;
 function microphoneChannel795(){microphoneChannelCache795??=new WeakMap();const b=waveformData.microphone;if(!b||b.numberOfChannels<2)return 0;if(microphoneChannelCache795.has(b))return microphoneChannelCache795.get(b);const energy=[0,0];for(let ch=0;ch<2;ch++){const data=b.getChannelData(ch);for(let i=0;i<data.length;i+=32)energy[ch]+=data[i]*data[i];}const channel=energy[1]>energy[0]?1:0;microphoneChannelCache795.set(b,channel);return channel;}
 function createMicrophonePan795(context){
@@ -26402,6 +26425,138 @@ function bindSilence795(mask,track,a,b){
  masterTimelineInner.addEventListener('pointermove',e=>{if(selectionDragging)return;const rect=masterTimelineInner.getBoundingClientRect(),x=e.clientX-rect.left;const within=hasSelection()&&x>=fragmentStart/duration*rect.width-8&&x<=fragmentEnd/duration*rect.width+8;masterTimelineInner.style.cursor=within?'ew-resize':'pointer';});
  document.querySelectorAll('.silence793').forEach(mask=>{ /* Existing masks will be rebuilt by the shared painter below. */ });
  drawAllWaveforms();
+})();
+
+</script>
+<script>
+// One mapping owns labels, selection, creation, deletion and shortcut help.
+const trackMapUi796=Object.freeze([
+ {number:1,id:'vocals',label:'Vocals'},{number:2,id:'drums',label:'Drums'},
+ {number:3,id:'bass',label:'Bass'},{number:4,id:'guitar',label:'Guitar'},
+ {number:5,id:'piano',label:'Piano'},{number:6,id:'other',label:'Other'},
+ {number:7,id:'microphone',label:'Microphone',generated:true},
+ {number:8,id:'pitchCorrection',label:'Pitch',generated:true},
+ {number:9,id:'harmonizer',label:'Harmonizer',generated:true},
+ {number:10,key:'0',id:'master',label:'Master'},{number:0,key:'~ / Ё',id:'original',label:'Original'}
+]);
+function trackRowUi796(id){return document.querySelector('.timeline-scroll[data-track="'+id+'"]')?.closest('.track');}
+function existsUi796(id){const row=trackRowUi796(id);return !!row&&getComputedStyle(row).display!=='none';}
+function fxProcessUi796(text,error=false){
+ const host=document.getElementById('fxStatus780');let message=document.getElementById('fxProcessUi796');
+ if(host&&!message){message=document.createElement('div');message.id='fxProcessUi796';host.prepend(message);}
+ if(message){message.textContent=text;message.classList.toggle('error',error);}
+ (error?console.error:console.info)('[Effects] '+text);
+}
+function refreshFxUi796(){for(const item of trackMapUi796)if(item.generated&&fxTargetButtons[item.id])fxTargetButtons[item.id].disabled=!existsUi796(item.id);}
+async function createTrackUi796(id){
+ const item=trackMapUi796.find(t=>t.id===id&&t.generated);if(!item)return;
+ if(existsUi796(id)){fxProcessUi796(item.number+' · '+item.label+' already exists');return;}
+ if(masterRecording||masterRecordArmed||rec780.busy){fxProcessUi796('Stop recording before creating a track',true);return;}
+ if(id==='microphone')document.getElementById('micCreate770').click();
+ else if(id==='pitchCorrection')await createPitchUi796();else await createHarmonUi796();
+ refreshFxUi796();if(!existsUi796(id))throw Error(item.label+' was not created');
+}
+async function removeTrackUi796(id){
+ if(id==='microphone')window.mynusMicrophone770.reset();
+ const audio=stemAudio[id];audio.pause();audio.removeAttribute('src');audio.load();
+ if(generatedTrackURLs[id])URL.revokeObjectURL(generatedTrackURLs[id]);generatedTrackURLs[id]=null;delete currentStemURLs[id];waveformData[id]=null;
+ if(id==='microphone'){rec780.micSegments=[];rec780.micSaved=null;}
+ trackRowUi796(id).style.display='none';if(fxTarget===id)setFxTarget('master');refreshFxUi796();applyMix();drawAllWaveforms();
+}
+const snapshotUi796=snapshotRec780,restoreUi796=restoreRec780;
+snapshotRec780=function(track){
+ if(!track.startsWith('generatedUi796:'))return snapshotUi796(track);
+ const id=track.split(':')[1];return {track,id,exists:existsUi796(id),buffer:waveformData[id],state:{...stemState[id]},crop:JSON.parse(JSON.stringify(stemCrop[id])),fx:JSON.parse(JSON.stringify(fxSettings[id])),mic:id==='microphone'?snapshotUi796('microphone'):null};
+};
+restoreRec780=async function(entry){
+ if(!entry.track.startsWith('generatedUi796:'))return restoreUi796(entry);
+ await removeTrackUi796(entry.id);
+ if(entry.exists){if(entry.id==='microphone')document.getElementById('micCreate770').click();if(entry.buffer)await installGeneratedTrack(entry.id,entry.buffer);trackRowUi796(entry.id).style.display='grid';stemState[entry.id]={...entry.state};stemCrop[entry.id]=entry.crop;fxSettings[entry.id]=entry.fx;if(entry.mic)await restoreUi796(entry.mic);applyFxSettings(entry.id);}
+ refreshFxUi796();syncTrackLevelUi795();applyMix();drawAllWaveforms();
+ fxProcessUi796(trackMapUi796.find(t=>t.id===entry.id).label+(entry.exists?' restored':' removed')+' by History');
+};
+async function deleteTrackUi796(id){
+ const item=trackMapUi796.find(t=>t.id===id&&t.generated);if(!item)return;
+ if(!existsUi796(id)){fxProcessUi796(item.number+' · '+item.label+' does not exist');return;}
+ if(masterRecording||masterRecordArmed||rec780.busy){fxProcessUi796('Stop recording before deleting a track',true);return;}
+ fxProcessUi796('Deleting '+item.number+' · '+item.label+'...');const before=snapshotRec780('generatedUi796:'+id);
+ try{await removeTrackUi796(id);rec780.undo.push(before);rec780.redo=[];updateRecControls780();fxProcessUi796(item.number+' · '+item.label+' deleted — Undo Rec available');}
+ catch(error){fxProcessUi796(item.label+' deletion failed: '+error.message,true);throw error;}
+}
+function globalStopUi796(){if(masterRecording||masterRecordArmed)stopMasterRecording();pauseAll();}
+// These are transport shortcuts only: original recording/capture functions stay intact.
+let zeroBusyUi796=false;
+async function fromZeroUi796(action){
+ if(zeroBusyUi796)return;zeroBusyUi796=true;
+ const trimStart=getProjectTrimStart,selection=hasSelection;
+ getProjectTrimStart=()=>0;hasSelection=()=>false;
+ try{syncAllTo(0);return await action();}
+ finally{getProjectTrimStart=trimStart;hasSelection=selection;zeroBusyUi796=false;updateSelectionButtons();updateTimeDisplay();}
+}
+async function recordZeroUi796(target){
+ if(masterRecording||masterRecordArmed||rec780.busy||zeroBusyUi796)return;
+ globalStopUi796();
+ if(target==='microphone'){
+  await createTrackUi796('microphone');
+  const mic=window.mynusMicrophone770;if(!mic.enabled())await mic.enable();if(!mic.enabled())return;
+ }
+ ensureMixAudioGraph();if(mixAudioContext.state==='suspended')await mixAudioContext.resume();activateMixMode();
+ return fromZeroUi796(()=>startMasterRecording(target));
+}
+function navigationUi796(key){
+ if(key==='Escape')setUiMode(isLyricsUiOpen()?UI_MODE.SEQUENCER:UI_MODE.KARAOKE);
+ else if(key==='Tab')setUiMode(isKaraokeUiMode()?UI_MODE.LYRICS:(isLyricsUiOpen()?UI_MODE.KARAOKE:UI_MODE.LYRICS));
+}
+window.addEventListener('keydown',e=>{
+ const k=e.key,code=e.code;if(e.metaKey)return;
+ // Escape/Tab navigation also works after editing a lyric text field.
+ if((k==='Escape'||k==='Tab')&&!e.ctrlKey&&!e.altKey){e.preventDefault();e.stopImmediatePropagation();if(!e.repeat)navigationUi796(k);return;}
+ if(isTypingTarget(e.target))return;
+ if(k==='Control'||k==='Alt'){modifierCandidate=null;e.stopImmediatePropagation();return;}
+ if(e.repeat)return;
+ const digit=/^(?:Digit|Numpad)([0-9])$/.exec(code),item=digit?trackMapUi796.find(t=>(t.key||String(t.number))===digit[1]):null;let action;
+ if(code==='Backquote'&&!e.ctrlKey&&!e.altKey)action=()=>switchMode('original');
+ else if(item?.generated&&e.ctrlKey)action=()=>e.altKey?deleteTrackUi796(item.id):createTrackUi796(item.id);
+ else if(item&&!e.ctrlKey&&!e.altKey)action=()=>{if(!item.generated||existsUi796(item.id))setFxTarget(item.id);};
+ else if(e.ctrlKey&&e.altKey&&k==='Backspace')action=()=>{globalStopUi796();resetToInitialSplit();};
+ else if(k==='Enter')action=()=>e.ctrlKey?recordZeroUi796('microphone'):e.altKey?recordZeroUi796('master'):(masterRecording||masterRecordArmed||isPlaying?globalStopUi796():fromZeroUi796(()=>playCurrentMode()));
+ else if(e.altKey&&!e.ctrlKey&&digit&&Number(digit[1])>=1&&Number(digit[1])<=5)action=()=>{const n=Number(digit[1]);if(n===1)switchMode('original');else if(n===5)switchMode('master');else selectGroup782(['','','stems','effects','inputs'][n]);};
+ else if(k==='Backspace'&&!e.ctrlKey&&!e.altKey)action=()=>{globalStopUi796();stopBtn.click();};
+ if(action){e.preventDefault();e.stopImmediatePropagation();Promise.resolve().then(action).catch(error=>fxProcessUi796(error.message,true));}
+},true);
+window.addEventListener('keyup',e=>{if(e.key==='Control'||e.key==='Alt'){modifierCandidate=null;e.stopImmediatePropagation();}},true);
+const installUi796=installGeneratedTrack;
+installGeneratedTrack=async function(...args){await installUi796(...args);refreshFxUi796();};
+const loadUi796=loadWaveforms;
+loadWaveforms=async function(...args){await loadUi796(...args);refreshFxUi796();};
+stopBtn.addEventListener('click',()=>{if(masterRecording||masterRecordArmed)stopMasterRecording();},true);
+
+// Set both borders from the visible scale rectangle, rather than aligning only one edge.
+function meterGeometryUi796(frame,range){return {top:range.top-frame.top,height:range.height};}
+alignFullScreenMeters780=function(){
+ const view=document.getElementById('lyricsFullScreenView');if(!view)return;const frame=view.getBoundingClientRect();
+ for(const [scale,selector] of [[lyricsFullScreenMicScale,'.fs-meter770.mic'],[lyricsFullScreenVolumeScale,'.fs-stereo780']]){
+  const group=document.querySelector(selector);if(!scale||!group)continue;group.hidden=scale.hidden;if(scale.hidden)continue;
+  const rect=scale.querySelector('input')?.getBoundingClientRect(),geo=rect&&meterGeometryUi796(frame,rect);if(!geo||!(geo.height>0))continue;
+  const set=(el,key,value)=>{if(el.style[key]!==value)el.style[key]=value;};
+  set(group,'top',geo.top+'px');set(group,'bottom','auto');set(group,'height',geo.height+'px');
+  group.querySelectorAll('.meter-scale770').forEach(bar=>set(bar,'height',geo.height+'px'));
+ }
+};
+(()=>{
+ for(const item of trackMapUi796){
+  const row=trackRowUi796(item.id),title=row?.querySelector('.track-title');if(!title)continue;
+  const marker=document.createElement('span');marker.className='track-numberUi796';marker.textContent=String(item.number);marker.title=item.id==='original'?'0 · Original — ~ / Ё':item.number+' · '+item.label+' — key '+(item.key||item.number);title.prepend(marker);
+  const fx=fxTargetButtons[item.id];if(fx){fx.textContent=item.number+' · '+item.label;fx.title=(item.key||item.number)+' — '+item.label+(item.generated?' · Ctrl: create · Ctrl+Alt: delete':'');}
+  if(item.id==='original')title.querySelector('button')?.classList.add('original-exportUi796');
+  if(item.id==='master'){const name=[...title.children].find(n=>n!==marker&&!n.classList.contains('master-groups793'));name?.classList.add('track-nameUi796');}
+ }
+ // Replace the two main help popovers with the actual mapping, not hand-maintained summaries.
+ for(const popup of document.querySelectorAll('.shortcut-popup')){
+  const rows=[['Space','Play / Pause'],['Enter','Stop / Play from 0'],['Ctrl + Enter','Record Microphone from 0'],['Alt + Enter','Mix Master from 0'],['Backspace','Stop'],['Home / End','Start / End'],['Page Up / Down','IN / OUT'],['Insert','Loop'],['Delete','Clear Selection'],['↑ / ↓','Zoom + / −'],['← / →','Cursor − / + 1 sec'],['~ / Ё','Original'],...trackMapUi796.filter(t=>t.id!=='original').map(t=>[String(t.key||t.number),t.label+' effects']),['Ctrl + 7 / 8 / 9','Create Microphone / Pitch / Harmonizer'],['Ctrl + Alt + 7 / 8 / 9','Delete Microphone / Pitch / Harmonizer · Undo Rec / Redo Rec'],['Alt + 1–5','Original / Stems / Effects / Inputs / Master'],['Ctrl + Alt + Backspace','Reset'],['− / +','Undo / Redo'],['Esc','Fullscreen / return to Main'],['Tab','Lyrics ↔ Fullscreen']];
+  popup.replaceChildren(...rows.map(([key,label])=>{const line=document.createElement('div');line.className='shortcut-line';const k=document.createElement('span'),v=document.createElement('span');k.className='shortcut-key';k.textContent=key;v.textContent=label;line.append(k,v);return line;}));
+ }
+ refreshFxUi796();alignFullScreenMeters780();
 })();
 
 </script>
