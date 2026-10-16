@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>KeyFix | 7.9.6 </title>
+  <title>3 новых фичи | 7.9.7 </title>
 
 
  <style>
@@ -3640,6 +3640,30 @@ canvas,.master-timeline-inner,.playhead,.master-cursor{cursor:pointer}.playhead,
 .fx-generated796{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;margin-bottom:4px}.fx-generated796 button{min-width:0;padding:4px 2px;font-size:10px}
 
 </style>
+<style id="features797">
+.fx-title797{display:flex;align-items:center;justify-content:space-between;gap:5px}
+#fxBypass797{font-size:10px;padding:3px 7px;white-space:nowrap;margin:0;min-height:20px;background:#333;color:white}
+#fxBypass797.active{background:#ffdc35;color:#312800}
+.edit-button797{position:absolute;right:3px;top:2px;z-index:31;height:17px;min-height:17px;padding:0 6px;border:1px solid #a58a00;border-radius:4px;background:#ffdf00;color:#252000;font:700 10px/15px Arial;cursor:pointer}
+.edit-button797:disabled{opacity:.45;cursor:default}
+.edit-region797{position:absolute;top:0;bottom:0;z-index:30;background:repeating-linear-gradient(135deg,rgba(255,220,0,.3) 0 2px,rgba(255,220,0,.08) 2px 5px);cursor:default;touch-action:none;box-sizing:border-box}
+.edit-region797::before,.edit-region797::after{content:"";position:absolute;top:0;bottom:0;width:2px;background:#ffe600;box-shadow:0 0 6px #fff500;animation:editPulse797 1s ease-in-out infinite;pointer-events:none}
+.edit-region797::before{left:0}.edit-region797::after{right:0}
+.edit-edge797{position:absolute;top:0;bottom:0;width:8px;z-index:2;cursor:ew-resize}.edit-edge797.left{left:0}.edit-edge797.right{right:0}
+@keyframes editPulse797{50%{opacity:.35}}
+.range-badge797{position:absolute;font:9px/13px Consolas,monospace;background:rgba(25,25,25,.82);color:white;padding:0 3px;border-radius:2px;white-space:nowrap;pointer-events:none;z-index:3}
+.range-badge797.start{top:2px;left:2px}.range-badge797.end{bottom:2px;right:2px}.range-badge797.length{top:50%;left:50%;transform:translate(-50%,-50%)}
+.edit-region797 .range-badge797{background:#ffdf00;color:#252000}
+.track-collapsed .edit-button797{display:none}
+.track-selection-overlay,.selection-range{overflow:visible}
+.lyrics-fullscreen-view .fs-meter770>span:first-child,.lyrics-fullscreen-view .fs-meter770>.meter-number770{pointer-events:none}
+#lyricsFullScreenView .fs-stereo780{gap:0}
+#lyricsFullScreenView .fs-meter770{width:20px;min-width:20px;max-width:20px;flex:0 0 20px}
+#lyricsFullScreenView .lyrics-fullscreen-lines{position:absolute;left:var(--lyrics-left797,110px)!important;right:var(--lyrics-right797,170px)!important;width:auto!important;max-width:none!important;margin:0;box-sizing:border-box}
+#lyricsFullScreenCurrent,#lyricsFullScreenNext{max-width:100%;white-space:normal!important;overflow-wrap:anywhere;word-break:normal}
+@media(prefers-reduced-motion:reduce){.edit-region797::before,.edit-region797::after{animation:none}}
+
+</style>
 </head>
 
 
@@ -4784,9 +4808,7 @@ canvas,.master-timeline-inner,.playhead,.master-cursor{cursor:pointer}.playhead,
 
       <div class="fx-column780"><aside class="fx-panel">
 
-        <div class="fx-panel-title">
-          EQ / Effects
-        </div>
+        <div class="fx-panel-title fx-title797"><span>EQ / Effects</span><button type="button" id="fxBypass797" aria-pressed="false">Bypass Off</button></div>
 
         <div class="fx-target-grid">
 
@@ -11516,10 +11538,11 @@ function createFxChain(
   }
 
 
-  return {
-    output:
-      outputGain
-  };
+  const bypassWet797=mixAudioContext.createGain(),bypassDry797=mixAudioContext.createGain(),bypassSum797=mixAudioContext.createGain();
+  outputGain.connect(bypassWet797);bypassWet797.connect(bypassSum797);inputNode.connect(bypassDry797);bypassDry797.connect(bypassSum797);
+  (window.fxBypassGraphs797??=new Map()).set(target,{wet:bypassWet797,dry:bypassDry797});
+  const bypass=!!fxSettings[target]?.bypass; bypassWet797.gain.value=bypass?0:1;bypassDry797.gain.value=bypass?1:0;
+  return {output:bypassSum797};
 
 }
 
@@ -13388,7 +13411,10 @@ function createExportFxChain(inputNode, audioContext, track = '') {
     outputGain
   );
 
-  return {eq:eqNodes,pan:panner,compressor,reverbDry,reverbWet,delay,delayFeedback,delayDry,delayWet,limiter,output:outputGain};
+  const bypassWet797=audioContext.createGain(),bypassDry797=audioContext.createGain(),bypassSum797=audioContext.createGain();
+ outputGain.connect(bypassWet797);bypassWet797.connect(bypassSum797);inputNode.connect(bypassDry797);bypassDry797.connect(bypassSum797);
+ bypassDry797.gain.value=0;
+ return {eq:eqNodes,pan:panner,compressor,reverbDry,reverbWet,delay,delayFeedback,delayDry,delayWet,limiter,output:bypassSum797,fxOutput797:outputGain,bypassWet797,bypassDry797};
 }
 
 function applyExportFxSettings(settings, nodes) {
@@ -13747,6 +13773,8 @@ async function installGeneratedTrack(
 }
 
 async function createPitchUi796() {
+  if(creationBusy797.has('pitchCorrection')||existsUi796('pitchCorrection'))return;
+  creationBusy797.add('pitchCorrection');refreshCreation797();await nextPaint797();
   try {
     createPitchCorrectionBtn.disabled = true; fxProcessUi796("Creating 8 · Pitch..."); status.textContent = "Creating Pitch Correction track...";
     const source = await decodeMicrophoneBuffer();
@@ -13785,11 +13813,13 @@ async function createPitchUi796() {
     fxProcessUi796("8 · Pitch created"); status.textContent = "Pitch Correction track created";
     status.className = "progress-status success";
   } catch (error) { fxProcessUi796("8 · Pitch creation failed: "+error.message,true); status.textContent = "Pitch Correction error: " + error.message; }
-  finally { createPitchCorrectionBtn.disabled = false; }
+  finally { creationBusy797.delete('pitchCorrection');refreshCreation797(); }
 }
 createPitchCorrectionBtn.addEventListener("click", createPitchUi796);
 
 async function createHarmonUi796() {
+  if(creationBusy797.has('harmonizer')||existsUi796('harmonizer'))return;
+  creationBusy797.add('harmonizer');refreshCreation797();await nextPaint797();
   try {
     createHarmonizerBtn.disabled = true; fxProcessUi796("Creating 9 · Harmonizer..."); status.textContent = "Creating Vocal Harmonizer track...";
     const source = await decodeMicrophoneBuffer();
@@ -13798,7 +13828,7 @@ async function createHarmonUi796() {
     fxProcessUi796("9 · Harmonizer created"); status.textContent = "Vocal Harmonizer track created";
     status.className = "progress-status success";
   } catch (error) { fxProcessUi796("9 · Harmonizer creation failed: "+error.message,true); status.textContent = "Vocal Harmonizer error: " + error.message; }
-  finally { createHarmonizerBtn.disabled = false; }
+  finally { creationBusy797.delete('harmonizer');refreshCreation797(); }
 }
 createHarmonizerBtn.addEventListener("click", createHarmonUi796);
 
@@ -20584,7 +20614,7 @@ function changeZoom(
     Math.max(
       minZoom,
       Math.min(
-        200,
+        400,
         value
       )
     );
@@ -21604,7 +21634,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "7.9.6",
+    version: "7.9.7",
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
     current_tonic: currentTrackTonic(),
@@ -22513,7 +22543,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "7.9.6";
+const MYNUS_CLIENT_VERSION = "7.9.7";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -26313,7 +26343,7 @@ async function loadExternalKaraoke792(r){
 </script>
 
 <script>
-// MyNus 7.9.6: non-destructive Silence, compact track heads and level controls.
+// MyNus 7.9.7: non-destructive Silence, compact track heads and level controls.
 const outputLevels793={L:1,R:1};let outputBus793=null;
 function outputDestination793(){
  if(outputBus793?.context===mixAudioContext)return outputBus793.input;
@@ -26388,7 +26418,7 @@ function silenceBuffer793(buffer,track,context){const ranges=silenceRanges793(tr
 
 </script>
 <script>
-// MyNus 7.9.6: consistent track state, mono input pan and timeline interactions.
+// MyNus 7.9.7: consistent track state, mono input pan and timeline interactions.
 var microphoneChannelCache795;
 function microphoneChannel795(){microphoneChannelCache795??=new WeakMap();const b=waveformData.microphone;if(!b||b.numberOfChannels<2)return 0;if(microphoneChannelCache795.has(b))return microphoneChannelCache795.get(b);const energy=[0,0];for(let ch=0;ch<2;ch++){const data=b.getChannelData(ch);for(let i=0;i<data.length;i+=32)energy[ch]+=data[i]*data[i];}const channel=energy[1]>energy[0]?1:0;microphoneChannelCache795.set(b,channel);return channel;}
 function createMicrophonePan795(context){
@@ -26403,7 +26433,7 @@ function bindSilence795(mask,track,a,b){
  mask.style.cursor='default';mask.style.touchAction='none';for(const side of ['left','right']){const edge=document.createElement('span');edge.className='silence-edge '+side;edge.dataset.silenceEdge=side;mask.append(edge);}
  let drag=null,suppressDoubleClick=false;
  mask.addEventListener('pointerdown',e=>{if(e.button!==0)return;e.preventDefault();e.stopPropagation();const rect=mask.getBoundingClientRect(),kind=e.target.dataset?.silenceEdge||(e.clientX-rect.left<=6?'left':rect.right-e.clientX<=6?'right':'move');drag={x:e.clientX,kind,range:[a,b],current:[a,b],moved:false,index:silenceRanges793(track).findIndex(r=>r[0]===a&&r[1]===b),pointer:e.pointerId};mask.setPointerCapture(e.pointerId);});
- mask.addEventListener('pointermove',e=>{if(!drag)return;e.preventDefault();e.stopPropagation();if(!drag.moved&&Math.abs(e.clientX-drag.x)<2)return;if(!drag.moved){pushSequencerHistorySnapshot();drag.moved=true;}const limit=waveformData[track]?.duration||duration,pair=silenceEditRange795(drag.range,drag.kind,(e.clientX-drag.x)/pixelsPerSecond,limit,Math.max(1/(waveformData[track]?.sampleRate||48000),1/pixelsPerSecond));drag.current=pair;stemCrop[track].silences[drag.index]=pair;mask.style.left=pair[0]*pixelsPerSecond+'px';mask.style.width=(pair[1]-pair[0])*pixelsPerSecond+'px';applyMix();});
+ mask.addEventListener('pointermove',e=>{if(!drag)return;e.preventDefault();e.stopPropagation();if(!drag.moved&&Math.abs(e.clientX-drag.x)<2)return;if(!drag.moved){pushSequencerHistorySnapshot();drag.moved=true;}const limit=waveformData[track]?.duration||duration,pair=silenceEditRange795(drag.range,drag.kind,(e.clientX-drag.x)/pixelsPerSecond,limit,Math.max(1/(waveformData[track]?.sampleRate||48000),1/pixelsPerSecond));drag.current=pair;stemCrop[track].silences[drag.index]=pair;mask.style.left=pair[0]*pixelsPerSecond+'px';mask.style.width=(pair[1]-pair[0])*pixelsPerSecond+'px';rangeBadges797(mask,pair[0],pair[1]);applyMix();});
  function finish(e,cancel){if(!drag)return;e.stopPropagation();const d=drag;drag=null;if(mask.hasPointerCapture(e.pointerId))mask.releasePointerCapture(e.pointerId);if(!d.moved)return;suppressDoubleClick=true;if(cancel)stemCrop[track].silences[d.index]=d.range;else stemCrop[track].silences=mergeSilence793(silenceRanges793(track));drawAllWaveforms();applyMix();}
  mask.addEventListener('pointerup',e=>finish(e,false));mask.addEventListener('pointercancel',e=>finish(e,true));
  mask.addEventListener('dblclick',e=>{if(suppressDoubleClick){e.preventDefault();e.stopImmediatePropagation();}},true);
@@ -26452,7 +26482,7 @@ async function createTrackUi796(id){
  const item=trackMapUi796.find(t=>t.id===id&&t.generated);if(!item)return;
  if(existsUi796(id)){fxProcessUi796(item.number+' · '+item.label+' already exists');return;}
  if(masterRecording||masterRecordArmed||rec780.busy){fxProcessUi796('Stop recording before creating a track',true);return;}
- if(id==='microphone')document.getElementById('micCreate770').click();
+ if(id==='microphone')await createMicrophone797();
  else if(id==='pitchCorrection')await createPitchUi796();else await createHarmonUi796();
  refreshFxUi796();if(!existsUi796(id))throw Error(item.label+' was not created');
 }
@@ -26471,7 +26501,7 @@ snapshotRec780=function(track){
 restoreRec780=async function(entry){
  if(!entry.track.startsWith('generatedUi796:'))return restoreUi796(entry);
  await removeTrackUi796(entry.id);
- if(entry.exists){if(entry.id==='microphone')document.getElementById('micCreate770').click();if(entry.buffer)await installGeneratedTrack(entry.id,entry.buffer);trackRowUi796(entry.id).style.display='grid';stemState[entry.id]={...entry.state};stemCrop[entry.id]=entry.crop;fxSettings[entry.id]=entry.fx;if(entry.mic)await restoreUi796(entry.mic);applyFxSettings(entry.id);}
+ if(entry.exists){if(entry.id==='microphone')await createMicrophone797();if(entry.buffer)await installGeneratedTrack(entry.id,entry.buffer);trackRowUi796(entry.id).style.display='grid';stemState[entry.id]={...entry.state};stemCrop[entry.id]=entry.crop;fxSettings[entry.id]=entry.fx;if(entry.mic)await restoreUi796(entry.mic);applyFxSettings(entry.id);}
  refreshFxUi796();syncTrackLevelUi795();applyMix();drawAllWaveforms();
  fxProcessUi796(trackMapUi796.find(t=>t.id===entry.id).label+(entry.exists?' restored':' removed')+' by History');
 };
@@ -26558,6 +26588,187 @@ alignFullScreenMeters780=function(){
  }
  refreshFxUi796();alignFullScreenMeters780();
 })();
+
+</script>
+<script>
+// 7.9.7: pending Input edit is isolated from confirmed media used by Save/Export.
+const edits797=new Map(),editButtons797=new Map(),creationBusy797=new Set(),editedTracks797=new Set();
+const buffers797=new Map(),bufferIds797=new WeakMap();let nextBuffer797=1,editInstall797=false,restoreEpoch797=0;
+for(const id of Object.keys(fxSettings))fxSettings[id].bypass=!!fxSettings[id].bypass;
+function inputIds797(){return stemIds.filter(id=>groupForTrack782(id)==='inputs');}
+function bufferId797(buffer){if(!buffer)return null;let id=bufferIds797.get(buffer);if(!id){id=nextBuffer797++;bufferIds797.set(buffer,id);}buffers797.set(id,buffer);return id;}
+function tenths797(value){const ticks=Math.max(0,Math.round((Number(value)||0)*10)),mins=Math.floor(ticks/600),secs=Math.floor(ticks/10)%60;return String(mins).padStart(2,'0')+':'+String(secs).padStart(2,'0')+'.'+ticks%10;}
+function rangeBadges797(host,start,end,edges=true){
+ for(const [kind,text] of [...(edges?[['start',tenths797(start)],['end',tenths797(end)]]:[]),['length',tenths797(Math.max(0,end-start))]]){
+  let badge=host.querySelector('.range-badge797.'+kind);if(!badge){badge=document.createElement('span');badge.className='range-badge797 '+kind;host.append(badge);}badge.textContent=text;
+ }
+}
+function nextPaint797(){return new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));}
+function refreshCreation797(){
+ for(const [id,button] of [['microphone',document.getElementById('micCreate770')],['pitchCorrection',createPitchCorrectionBtn],['harmonizer',createHarmonizerBtn]]){
+  if(!button)continue;button.dataset.createLabel797??=button.textContent;const busy=creationBusy797.has(id);
+  const text=busy?'⌛':button.dataset.createLabel797;if(button.textContent!==text)button.textContent=text;
+  button.disabled=busy||existsUi796(id);button.setAttribute('aria-busy',String(busy));
+ }
+}
+function refreshBypass797(){const b=document.getElementById('fxBypass797');if(!b)return;const on=!!fxSettings[fxTarget]?.bypass;b.textContent=on?'Bypass On':'Bypass Off';b.classList.toggle('active',on);b.setAttribute('aria-pressed',String(on));b.disabled=!fxSettings[fxTarget];}
+function updateBypass797(target){const graph=window.fxBypassGraphs797?.get(target);if(graph){const on=!!fxSettings[target]?.bypass;graph.wet.gain.value=on?0:1;graph.dry.gain.value=on?1:0;}}
+const applyFx797=applyFxSettings;
+applyFxSettings=function(target){const result=applyFx797(target);updateBypass797(target);return result;};
+const applyExport797=applyExportFxSettings;
+applyExportFxSettings=function(settings,nodes){applyExport797(settings,nodes.fxOutput797?{...nodes,output:nodes.fxOutput797}:nodes);if(nodes.bypassWet797){nodes.bypassWet797.gain.value=settings.bypass?0:1;nodes.bypassDry797.gain.value=settings.bypass?1:0;}};
+const setTarget797=setFxTarget;
+setFxTarget=function(...args){setTarget797(...args);refreshBypass797();};
+document.getElementById('fxBypass797').onclick=()=>{if(!fxSettings[fxTarget])return;pushSequencerHistorySnapshot();fxSettings[fxTarget].bypass=!fxSettings[fxTarget].bypass;updateBypass797(fxTarget);refreshBypass797();fxProcessUi796(fxTarget+' — Bypass '+(fxSettings[fxTarget].bypass?'On':'Off'));};
+function editData797(edit){return {base:bufferId797(edit.base),sourceStart:edit.sourceStart,sourceEnd:edit.sourceEnd,cutStart:edit.cutStart,cutEnd:edit.cutEnd,destStart:edit.destStart};}
+function editEnd797(edit){return edit.destStart+edit.sourceEnd-edit.sourceStart;}
+function moveEdit797(edit,kind,delta,limit){
+ const next={...edit},min=1/edit.base.sampleRate;
+ if(kind==='move')next.destStart=Math.max(0,Math.min(limit-(edit.sourceEnd-edit.sourceStart),edit.destStart+delta));
+ else if(kind==='left'){
+  delta=Math.max(-edit.sourceStart,-edit.destStart,Math.min(edit.sourceEnd-edit.sourceStart-min,delta));next.sourceStart+=delta;next.destStart+=delta;
+ }else{delta=Math.max(min-(edit.sourceEnd-edit.sourceStart),Math.min(edit.base.duration-edit.sourceEnd,limit-editEnd797(edit),delta));next.sourceEnd+=delta;}
+ return next;
+}
+function renderEdit797(edit,context){
+ const base=edit.base,rate=base.sampleRate,result=context.createBuffer(base.numberOfChannels,Math.max(base.length,Math.ceil(duration*rate)),rate);
+ const left=Math.max(0,Math.round(edit.sourceStart*rate)),right=Math.min(base.length,Math.round(edit.sourceEnd*rate)),dest=Math.max(0,Math.round(edit.destStart*rate));
+ const cutLeft=Math.max(0,Math.round(Math.min(edit.cutStart,edit.sourceStart)*rate)),cutRight=Math.min(base.length,Math.round(Math.max(edit.cutEnd,edit.sourceEnd)*rate));
+ for(let ch=0;ch<base.numberOfChannels;ch++){const input=base.getChannelData(ch),out=result.getChannelData(ch);out.set(input);out.fill(0,cutLeft,cutRight);const count=Math.max(0,Math.min(right-left,out.length-dest));out.fill(0,dest,dest+count);out.set(input.subarray(left,left+count),dest);}
+ return result;
+}
+async function previewEdit797(id,edit){
+ if(edits797.get(id)!==edit)return;ensureMixAudioGraph();const rendered=renderEdit797(edit,mixAudioContext);edit.preview=rendered;
+ const audio=stemAudio[id],time=getCurrentTime(),playing=isPlaying,token=edit.token=(edit.token||0)+1;
+ const url=URL.createObjectURL(audioBufferToWaveBlob(rendered)),previous=edit.previewURL;edit.previewURL=url;
+ audio.src=url;audio.load();try{await waitForMetadata(audio);if(edits797.get(id)!==edit||edit.token!==token)return;audio.currentTime=Math.max(0,Math.min(time,rendered.duration));if(playing&&isPlaying)await audio.play();}
+ finally{if(previous)URL.revokeObjectURL(previous);}
+ if(edits797.get(id)===edit){drawAllWaveforms();applyMix();}
+}
+function discardEdit797(id,restoreAudio=true){
+ const edit=edits797.get(id);if(!edit)return;edits797.delete(id);edit.token=(edit.token||0)+1;
+ if(restoreAudio){const audio=stemAudio[id],time=getCurrentTime(),playing=isPlaying,url=generatedTrackURLs[id]||currentStemURLs[id];if(url){audio.src=url;audio.load();waitForMetadata(audio).then(()=>{audio.currentTime=Math.min(time,audio.duration||time);if(playing&&isPlaying)return audio.play();}).catch(console.error);}}
+ if(edit.previewURL)URL.revokeObjectURL(edit.previewURL);renderEditRegions797();
+}
+async function beginEdit797(id){
+ if(masterRecording||masterRecordArmed||rec780.busy||window.historyRestore797)return;
+ if(edits797.has(id))return;
+ if(!hasSelection()){fxProcessUi796('Select an IN–OUT range before Edit',true);return;}
+ const source=waveformData[id];if(!source){fxProcessUi796('Record or load '+id+' before Edit',true);return;}
+ ensureMixAudioGraph();const a=Math.max(0,fragmentStart),b=Math.min(source.duration,fragmentEnd);if(b<=a)return;
+ editedTracks797.add(id);pushSequencerHistorySnapshot();const base=silenceBuffer793(source,id,mixAudioContext),edit={base,sourceStart:a,sourceEnd:b,cutStart:a,cutEnd:b,destStart:a};edits797.set(id,edit);
+ renderEditRegions797();await previewEdit797(id,edit);fxProcessUi796(id+' — Edit active; double-click to confirm');
+}
+async function confirmEdit797(id){
+ const edit=edits797.get(id);if(!edit||edit.confirming||masterRecording||masterRecordArmed||rec780.busy)return;
+ edit.confirming=true;pushSequencerHistorySnapshot();window.editCommitting797=true;updateSequencerUndoRedoButtons();ensureMixAudioGraph();const rendered=renderEdit797(edit,mixAudioContext);
+ try{editInstall797=true;await installGeneratedTrack(id,rendered);stemCrop[id].silences=[];stemCrop[id].in=0;stemCrop[id].out=null;
+  if(id==='microphone'){rec780.micSegments=[{start:0,buffer:rendered}];rec780.micSaved=rendered;}
+  discardEdit797(id,false);drawAllWaveforms();applyMix();updateRecControls780();fxProcessUi796(id+' — Edit confirmed (mixdown)');
+ }catch(error){edit.confirming=false;fxProcessUi796('Edit confirmation failed: '+error.message,true);throw error;}finally{editInstall797=false;window.editCommitting797=false;updateSequencerUndoRedoButtons();}
+}
+function bindEdit797(mask,id){
+ let drag=null,suppressDouble=false;
+ mask.addEventListener('pointerdown',e=>{if(e.button!==0||masterRecording||masterRecordArmed||window.historyRestore797)return;e.preventDefault();e.stopImmediatePropagation();const edit=edits797.get(id);if(!edit||edit.confirming)return;drag={x:e.clientX,kind:e.target.dataset.editEdge797||'move',original:{...edit},moved:false};mask.setPointerCapture(e.pointerId);});
+ mask.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();});
+ mask.addEventListener('pointermove',e=>{if(!drag)return;e.preventDefault();e.stopImmediatePropagation();if(!drag.moved&&Math.abs(e.clientX-drag.x)<2)return;if(!drag.moved){pushSequencerHistorySnapshot();drag.moved=true;}const edit=edits797.get(id),next=moveEdit797(drag.original,drag.kind,(e.clientX-drag.x)/pixelsPerSecond,duration);Object.assign(edit,{sourceStart:next.sourceStart,sourceEnd:next.sourceEnd,destStart:next.destStart});mask.style.left=edit.destStart*pixelsPerSecond+'px';mask.style.width=(editEnd797(edit)-edit.destStart)*pixelsPerSecond+'px';rangeBadges797(mask,edit.destStart,editEnd797(edit));});
+ const end=(e,cancel)=>{if(!drag)return;e.stopImmediatePropagation();const d=drag;drag=null;if(mask.hasPointerCapture(e.pointerId))mask.releasePointerCapture(e.pointerId);if(!d.moved)return;suppressDouble=true;const edit=edits797.get(id);if(cancel)Object.assign(edit,{sourceStart:d.original.sourceStart,sourceEnd:d.original.sourceEnd,destStart:d.original.destStart});previewEdit797(id,edit).catch(error=>fxProcessUi796(error.message,true));};
+ mask.addEventListener('pointerup',e=>end(e,false));mask.addEventListener('pointercancel',e=>end(e,true));
+ mask.addEventListener('dblclick',e=>{e.preventDefault();e.stopImmediatePropagation();if(suppressDouble){suppressDouble=false;return;}confirmEdit797(id).catch(console.error);});
+}
+function renderEditRegions797(){
+ for(const id of inputIds797()){
+  const row=trackRowUi796(id),timeline=timelines[id];if(!row||!timeline)continue;
+  let button=editButtons797.get(id);if(!button){button=document.createElement('button');button.type='button';button.className='edit-button797';button.onclick=e=>{e.stopPropagation();beginEdit797(id).catch(error=>fxProcessUi796(error.message,true));};row.append(button);editButtons797.set(id,button);}
+  const edit=edits797.get(id);button.textContent=edit?'Move':'Edit';button.title=edit?'Drag the yellow region or its edges; double-click to confirm':'Edit the selected audio';button.disabled=masterRecording||masterRecordArmed||rec780.busy||!waveformData[id]||!!window.historyRestore797;
+  timeline.querySelectorAll('.edit-region797').forEach(n=>n.remove());if(!edit)continue;
+  const mask=document.createElement('div');mask.className='edit-region797';mask.style.left=edit.destStart*pixelsPerSecond+'px';mask.style.width=(editEnd797(edit)-edit.destStart)*pixelsPerSecond+'px';mask.title='Double-click to confirm Edit';
+  for(const side of ['left','right']){const edge=document.createElement('span');edge.className='edit-edge797 '+side;edge.dataset.editEdge797=side;mask.append(edge);}rangeBadges797(mask,edit.destStart,editEnd797(edit));bindEdit797(mask,id);timeline.append(mask);
+ }
+}
+function refreshRanges797(){
+ for(const node of document.querySelectorAll('.silence793')){const a=parseFloat(node.style.left)/pixelsPerSecond,b=a+parseFloat(node.style.width)/pixelsPerSecond;rangeBadges797(node,a,b);}
+ if(hasSelection()){if(selectionRange)rangeBadges797(selectionRange,fragmentStart,fragmentEnd,false);for(const node of document.querySelectorAll('.track-selection-overlay'))rangeBadges797(node,fragmentStart,fragmentEnd);}
+ if(selectionInTime&&hasSelection())selectionInTime.textContent=tenths797(fragmentStart);if(selectionOutTime&&hasSelection())selectionOutTime.textContent=tenths797(fragmentEnd);
+}
+// The edit's preview contains baked Silence, while the confirmed crop remains available to Save/Export.
+const silenced797=silenced793;silenced793=function(id,time){return edits797.has(id)?false:silenced797(id,time);};
+// At detailed zoom a song can exceed browser canvas limits. Draw only the visible window.
+function drawViewport797(canvas,timeline,segments,live=false){
+ const full=getTimelineWidth(),left=Math.max(0,Math.floor(getSharedScrollLeft()-32)),viewport=timeline.closest('.timeline-scroll')?.clientWidth||masterTimeline.clientWidth||1000,width=Math.max(1,Math.min(full-left,Math.ceil(viewport+64))),height=90;
+ timeline.style.width=full+'px';canvas.width=width;canvas.height=height;canvas.style.width=width+'px';canvas.style.height=height+'px';canvas.style.left=left+'px';
+ const ctx=canvas.getContext('2d');ctx.clearRect(0,0,width,height);ctx.beginPath();
+ for(const segment of segments){if(!segment.buffer)continue;const buffer=segment.buffer,data=buffer.getChannelData(0),rate=buffer.sampleRate,start=segment.start||0;
+  const first=Math.max(0,Math.floor(start*pixelsPerSecond-left)),last=Math.min(width,Math.ceil((start+buffer.duration)*pixelsPerSecond-left));
+  for(let x=first;x<last;x++){const a=Math.max(0,Math.floor(((left+x)/pixelsPerSecond-start)*rate)),b=Math.min(data.length,Math.max(a+1,Math.ceil(((left+x+1)/pixelsPerSecond-start)*rate)));let low=0,high=0;for(let i=a;i<b;i++){low=Math.min(low,data[i]);high=Math.max(high,data[i]);}ctx.moveTo(x,45+low*45);ctx.lineTo(x,45+high*45);}
+ }
+ if(live&&masterRecording){const block=2048/masterPcmSampleRate;for(let i=0;i<masterLivePeaks.length;i++){const p=masterLivePeaks[i],a=typeof p==='object'?p.start:masterRecordTimelineStart+i*block,b=typeof p==='object'?p.end:a+block,peak=typeof p==='object'?p.peak:p;for(let x=Math.max(0,Math.floor(a*pixelsPerSecond-left));x<Math.min(width,Math.ceil(b*pixelsPerSecond-left));x++){ctx.moveTo(x,45-peak*45);ctx.lineTo(x,45+peak*45);}}}
+ ctx.strokeStyle='#333';ctx.lineWidth=1;ctx.stroke();
+}
+const waveform797=drawWaveform;
+drawWaveform=function(canvas,timeline,buffer){const id=Object.keys(canvases).find(key=>canvases[key]===canvas),edit=edits797.get(id);if(getTimelineWidth()>16384)return drawViewport797(canvas,timeline,[{start:0,buffer:edit?.preview||buffer}]);canvas.style.left='0px';return waveform797(canvas,timeline,edit?.preview||buffer);};
+const composite797=typeof drawMasterCompositeWaveform==='function'?drawMasterCompositeWaveform:null;
+if(composite797)drawMasterCompositeWaveform=function(){if(getTimelineWidth()>16384)return drawViewport797(canvases.master,timelines.master||document.getElementById('masterTrackTimeline'),masterSegments,true);canvases.master.style.left='0px';return composite797();};
+const liveMic797=typeof drawLiveMicrophone781==='function'?drawLiveMicrophone781:null;
+if(liveMic797)drawLiveMicrophone781=function(){if(getTimelineWidth()>16384)return drawViewport797(canvases.microphone,timelines.microphone,[{start:0,buffer:waveformData.microphone}],true);canvases.microphone.style.left='0px';return liveMic797();};
+let scrollPaint797=false;
+function redrawViewport797(){scrollPaint797=false;if(getTimelineWidth()<=16384)return;for(const id of ['original',...stemIds,'master']){const canvas=canvases[id],timeline=timelines[id]||(id==='master'?document.getElementById('masterTrackTimeline'):null);if(!canvas||!timeline)continue;if(id==='master')drawViewport797(canvas,timeline,masterSegments,rec780.target==='master');else drawViewport797(canvas,timeline,[{start:0,buffer:edits797.get(id)?.preview||waveformData[id]}],id==='microphone'&&rec780.target==='microphone');}}
+sharedScroll.addEventListener('scroll',()=>{if(getTimelineWidth()>16384&&!scrollPaint797){scrollPaint797=true;requestAnimationFrame(redrawViewport797);}});
+const draw797=drawAllWaveforms;drawAllWaveforms=function(...args){const result=draw797(...args);renderEditRegions797();refreshRanges797();return result;};
+const selection797=updateSelectionDisplay;updateSelectionDisplay=function(...args){const result=selection797(...args);refreshRanges797();return result;};
+const labels797=refreshSelectionTimelineLabels;refreshSelectionTimelineLabels=function(...args){const result=labels797(...args);refreshRanges797();return result;};
+const historySnapshot797=cloneSequencerHistoryState;
+cloneSequencerHistoryState=function(){const state=historySnapshot797();state.inputEdit797={};state.inputMedia797={};for(const id of inputIds797()){if(!editedTracks797.has(id))continue;const edit=edits797.get(id);if(edit)state.inputEdit797[id]=editData797(edit);state.inputMedia797[id]={buffer:bufferId797(waveformData[id]),saved:id==='microphone'?bufferId797(rec780.micSaved):null,segments:id==='microphone'?rec780.micSegments.map(s=>({start:s.start,buffer:bufferId797(s.buffer)})):[]};}return state;};
+const historyApply797=applySequencerHistoryState;
+applySequencerHistoryState=function(state){
+ if(!state)return;const epoch=++restoreEpoch797;
+ for(const id of [...edits797.keys()])discardEdit797(id,!state.inputMedia797?.[id]);
+ editedTracks797.clear();for(const id of Object.keys(state.inputMedia797||{}))editedTracks797.add(id);
+ for(const id of Object.keys(fxSettings))fxSettings[id].bypass=!!state.fxSettings?.[id]?.bypass;
+ historyApply797(state);if(!state.inputMedia797){refreshBypass797();return;}
+ window.historyRestore797=true;renderEditRegions797();updateSequencerUndoRedoButtons();
+ window.editRestorePromise797=(async()=>{
+  try{editInstall797=true;
+   for(const [id,media] of Object.entries(state.inputMedia797)){if(epoch!==restoreEpoch797)return;const buffer=buffers797.get(media.buffer);if(buffer&&waveformData[id]!==buffer)await installGeneratedTrack(id,buffer);
+    else if(buffer){const audio=stemAudio[id],url=generatedTrackURLs[id]||currentStemURLs[id],time=getCurrentTime(),playing=isPlaying;if(url&&audio.src!==url){audio.src=url;audio.load();await waitForMetadata(audio);audio.currentTime=Math.min(time,buffer.duration);if(playing&&isPlaying)await audio.play();}}
+    if(id==='microphone'){rec780.micSegments=media.segments.map(s=>({start:s.start,buffer:buffers797.get(s.buffer)}));rec780.micSaved=buffers797.get(media.saved)||null;}}
+   if(epoch!==restoreEpoch797)return;historyApply797(state);
+   for(const [id,data] of Object.entries(state.inputEdit797||{})){const base=buffers797.get(data.base);if(base){const edit={...data,base};edits797.set(id,edit);await previewEdit797(id,edit);}}
+   drawAllWaveforms();applyMix();refreshBypass797();
+  }catch(error){fxProcessUi796('Edit history failed: '+error.message,true);}
+  finally{editInstall797=false;if(epoch===restoreEpoch797){window.historyRestore797=false;renderEditRegions797();updateSequencerUndoRedoButtons();}}
+ })();
+};
+const undo797=undoSequencer,redo797=redoSequencer;
+undoSequencer=function(){if(!window.historyRestore797&&!window.editCommitting797)return undo797();};redoSequencer=function(){if(!window.historyRestore797&&!window.editCommitting797)return redo797();};
+const historyButtons797=updateSequencerUndoRedoButtons;
+updateSequencerUndoRedoButtons=function(){historyButtons797();if(window.historyRestore797||window.editCommitting797){if(sequencerUndoBtn)sequencerUndoBtn.disabled=true;if(sequencerRedoBtn)sequencerRedoBtn.disabled=true;}};
+const projectRestore797=restoreProjectSequencerState;
+restoreProjectSequencerState=function(saved){for(const id of Object.keys(fxSettings))fxSettings[id].bypass=!!saved?.fxSettings?.[id]?.bypass;projectRestore797(saved);for(const id of Object.keys(fxSettings))updateBypass797(id);refreshBypass797();refreshCreation797();};
+const install797=installGeneratedTrack;
+installGeneratedTrack=async function(id,buffer){if(!editInstall797){if(edits797.has(id))discardEdit797(id,false);editedTracks797.delete(id);}await install797(id,buffer);refreshCreation797();renderEditRegions797();};
+const remove797=removeTrackUi796;removeTrackUi796=async function(id){discardEdit797(id,false);await remove797(id);refreshCreation797();};
+const load797=loadWaveforms;loadWaveforms=async function(...args){for(const id of [...edits797.keys()])discardEdit797(id,false);editedTracks797.clear();await load797(...args);refreshCreation797();refreshBypass797();renderEditRegions797();};
+const clear797=clearProjectState;clearProjectState=function(...args){restoreEpoch797++;window.historyRestore797=false;window.editCommitting797=false;for(const id of [...edits797.keys()])discardEdit797(id,false);editedTracks797.clear();const result=clear797(...args);buffers797.clear();for(const id of Object.keys(fxSettings)){fxSettings[id].bypass=false;updateBypass797(id);}refreshBypass797();refreshCreation797();renderEditRegions797();return result;};
+const micCreate797=document.getElementById('micCreate770'),createMic797=micCreate797.onclick;
+async function createMicrophone797(...args){if(creationBusy797.has('microphone')||existsUi796('microphone'))return;creationBusy797.add('microphone');refreshCreation797();await nextPaint797();try{return createMic797.apply(micCreate797,args);}finally{creationBusy797.delete('microphone');refreshCreation797();renderEditRegions797();}}
+micCreate797.onclick=(...args)=>createMicrophone797(...args).catch(error=>fxProcessUi796(error.message,true));
+const fxRefresh797=refreshFxUi796;refreshFxUi796=function(...args){const result=fxRefresh797(...args);refreshCreation797();return result;};
+function fullscreenLayout797(){
+ const view=document.getElementById('lyricsFullScreenView');if(!view)return;const frame=view.getBoundingClientRect();if(!frame.width||!frame.height)return;
+ const mic=document.querySelector('.fs-meter770.mic'),stereo=document.querySelector('.fs-stereo780'),micScale=lyricsFullScreenMicScale,volumeScale=lyricsFullScreenVolumeScale;
+ const set=(el,key,value)=>{if(!el)return;if(key.startsWith('--')){if(el.style.getPropertyValue(key)!==value)el.style.setProperty(key,value);}else if(el.style[key]!==value)el.style[key]=value;};
+ for(const [scale,group] of [[micScale,mic],[volumeScale,stereo]]){if(!scale||!group)continue;group.hidden=scale.hidden;if(scale.hidden)continue;const rect=scale.getBoundingClientRect();set(group,'top',rect.top-frame.top+'px');set(group,'bottom','auto');set(group,'height',rect.height+'px');group.querySelectorAll('.meter-scale770').forEach(bar=>set(bar,'height',rect.height+'px'));}
+ const right=volumeScale&&!volumeScale.hidden?volumeScale.getBoundingClientRect():null;
+ if(right&&stereo&&!stereo.hidden){const bars=[...stereo.querySelectorAll('.meter-scale770')];if(bars.length===2){const width=bars[0].getBoundingClientRect().width,gap=12;set(stereo,'gap',gap+'px');set(stereo,'right',Math.max(0,frame.right-right.left+gap)+'px');}}
+ if(micScale&&!micScale.hidden&&mic&&!mic.hidden){const r=micScale.getBoundingClientRect();set(mic,'left',Math.max(0,r.right-frame.left+12)+'px');}
+ const leftEdge=mic&&!mic.hidden?mic.getBoundingClientRect().right:frame.left+80,rightEdge=stereo&&!stereo.hidden?stereo.getBoundingClientRect().left:frame.right-80;
+ set(view,'--lyrics-left797',Math.max(18,leftEdge-frame.left+18)+'px');set(view,'--lyrics-right797',Math.max(18,frame.right-rightEdge+18)+'px');
+}
+alignFullScreenMeters780=fullscreenLayout797;
+new ResizeObserver(()=>requestAnimationFrame(fullscreenLayout797)).observe(document.getElementById('lyricsFullScreenView'));
+window.addEventListener('resize',()=>requestAnimationFrame(fullscreenLayout797));
+refreshBypass797();refreshCreation797();renderEditRegions797();refreshRanges797();fullscreenLayout797();
 
 </script>
 </body>
