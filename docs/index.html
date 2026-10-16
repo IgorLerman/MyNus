@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>Karaoke KFN&MP3  | 7.9.2 </title>
+  <title>TrackHeads  | 7.9.3 </title>
 
 
  <style>
@@ -8604,6 +8604,7 @@ function applySequencerHistoryState(state) {
   try {
     stemIds.forEach(stemId => {
       if (state.stemState?.[stemId]) Object.assign(stemState[stemId], cloneSerializable(state.stemState[stemId], {}));
+      stemCrop[stemId].silences=cloneSerializable(state.stemCrop?.[stemId]?.silences, []);
       if (state.stemCrop?.[stemId]) Object.assign(stemCrop[stemId], cloneSerializable(state.stemCrop[stemId], {}));
     });
 
@@ -9698,7 +9699,7 @@ function applyMix() {
 
 
       const insideCrop =
-        current >= crop.in
+        !silenced793(stemId,current) && current >= crop.in
         &&
         (
           crop.out === null
@@ -9794,7 +9795,7 @@ function updateStemPlaybackVisuals() {
     const state = fsState || stemState[stemId];
     const crop = stemCrop[stemId];
     const insideCrop =
-      current >= crop.in
+      !silenced793(stemId,current) && current >= crop.in
       && (crop.out === null || current < crop.out);
 
     if (state.muted) {
@@ -10931,7 +10932,7 @@ function ensureMixAudioGraph() {
 
 
   masterRecordSilentGain.connect(
-    mixAudioContext.destination
+    outputDestination793()
   );
 
 
@@ -11138,7 +11139,7 @@ function ensureMixAudioGraph() {
 
 
   masterFadeGainNode.connect(
-    mixAudioContext.destination
+    outputDestination793()
   );
 
 
@@ -11930,7 +11931,7 @@ async function startMasterRecording(target='master'){
    ensureMixAudioGraph();microphoneAudio.muted=true;
    micCaptureInput780=window.mynusMicrophone770.input();
    micCapture780=mixAudioContext.createScriptProcessor(2048,2,2);micSilent780=mixAudioContext.createGain();micSilent780.gain.value=0;
-   micCaptureInput780.connect(micCapture780);micCapture780.connect(micSilent780);micSilent780.connect(mixAudioContext.destination);
+   micCaptureInput780.connect(micCapture780);micCapture780.connect(micSilent780);micSilent780.connect(outputDestination793());
    micCapture780.onaudioprocess=captureMicPcm781;
   }
   await startMasterRecordingLegacy780();updateRecControls780();
@@ -13462,7 +13463,7 @@ async function exportTrack(track,scope,format='wav'){
   // Render from the beginning to preserve reverb, delay and compressor state at selection start.
   const frameEnd=Math.min(buffer.length,Math.ceil(bounds.end*buffer.sampleRate));
   const offline=new OfflineAudioContext(2,frameEnd,buffer.sampleRate);
-  const node=offline.createBufferSource();node.buffer=buffer;
+  const node=offline.createBufferSource();node.buffer=silenceBuffer793(buffer,track,offline);
   const level=offline.createGain();
   const volume=track==='original'?Number(originalVolume.value):track==='master'?Number(masterVolume.value):Number(stemState[track]?.volume??100);
   level.gain.value=Math.max(0,volume/100);node.connect(level);
@@ -15627,11 +15628,11 @@ async function installLocalToneGraph() {
       node.onprocessorerror = () => {clearTimeout(timer);reject(new Error("Rubber Band audio processor failed"));};
     });
     // All non-Original audio reaches this bus; Original has its own playback path.
-    masterFadeGainNode.disconnect(mixAudioContext.destination);
+    masterFadeGainNode.disconnect(outputDestination793());
     masterFadeGainNode.disconnect(masterAnalyserNode);
     masterFadeGainNode.disconnect(masterRecordBus);
     masterFadeGainNode.connect(node);
-    node.connect(mixAudioContext.destination);
+    node.connect(outputDestination793());
     node.connect(masterAnalyserNode);
     node.connect(masterRecordBus);
     localToneNodes.set("mix",node);
@@ -21537,7 +21538,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "7.9.2",
+    version: "7.9.3",
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
     current_tonic: currentTrackTonic(),
@@ -22381,6 +22382,7 @@ function restoreProjectSequencerState(saved) {
 
   stemIds.forEach(stemId => {
     if (saved.stemState?.[stemId]) Object.assign(stemState[stemId], saved.stemState[stemId]);
+    stemCrop[stemId].silences=cloneSerializable(saved.stemCrop?.[stemId]?.silences, []);
     if (saved.stemCrop?.[stemId]) Object.assign(stemCrop[stemId], saved.stemCrop[stemId]);
   });
 
@@ -22443,7 +22445,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "7.9.2";
+const MYNUS_CLIENT_VERSION = "7.9.3";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -25527,7 +25529,7 @@ for(const id of ['lyricsUndoBtn','lyricsRedoBtn'])document.getElementById(id).ad
  document.addEventListener('pointerdown',e=>{if(!popup.contains(e.target)&&!e.target.closest('.track-tonic'))popup.hidden=true;});
  document.addEventListener('keydown',e=>{if(e.key==='Escape')popup.hidden=true;});
  // Mirror messages, rather than continually changing playback counters.
- for(const [id,name] of [['status','STATUS'],['masterState','REC'],['selectionInfo','TIMELINE'],['trackDurationInfo','TIMELINE'],['lyricsEditorStatus','LYRICS']]){
+ for(const [id,name] of [['status','STATUS'],['masterState','REC'],['trackDurationInfo','TIMELINE'],['lyricsEditorStatus','LYRICS']]){
   const element=document.getElementById(id);if(!element)continue;let previous=element.textContent.trim();
   const observer=new MutationObserver(()=>{const message=element.textContent.trim();if(!message||message===previous)return;previous=message;window.mynusLocalConsole.message(name,message,getComputedStyle(element).color);});
   observer.observe(element,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['style','class']});
@@ -25643,7 +25645,7 @@ async function waitForPaidResult760(data,run){
   masterAnalyserNode.connect(splitter);splitter.connect(l,0);splitter.connect(r,1);
   // Original plays outside the stem graph. Tap it without changing its volume.
   originalMeterSource=mixAudioContext.createMediaElementSource(originalAudio);
-  originalMeterSource.connect(mixAudioContext.destination);originalMeterSource.connect(splitter);
+  originalMeterSource.connect(outputDestination793());originalMeterSource.connect(splitter);
   meters={L:l,R:r};
  }
  async function turnOn(){
@@ -25698,7 +25700,7 @@ async function waitForPaidResult760(data,run){
    nextFrame=now;const values={L:-Infinity,R:-Infinity,Mic:-Infinity};
    for(const [label,node] of Object.entries({...meters,Mic:micAnalyser})){
     if(!node)continue;const data=new Float32Array(node.fftSize);node.getFloatTimeDomainData(data);
-    let peak=0;for(const v of data)peak=Math.max(peak,Math.abs(v));values[label]=peak>0?20*Math.log10(peak):-Infinity;
+    let peak=0;for(const v of data)peak=Math.max(peak,Math.abs(v));if(label==='L'||label==='R')peak*=outputLevels793[label];values[label]=peak>0?20*Math.log10(peak):-Infinity;
    }
    for(const meter of meterElements){
     const db=values[meter.label],fill=Math.max(0,Math.min(1,(db+48)/54));
@@ -26242,5 +26244,65 @@ async function loadExternalKaraoke792(r){
 
 </script>
 
+<script>
+// MyNus 7.9.3: non-destructive Silence, compact track heads and level controls.
+const outputLevels793={L:1,R:1};let outputBus793=null;
+function outputDestination793(){
+ if(outputBus793?.context===mixAudioContext)return outputBus793.input;
+ const input=mixAudioContext.createGain(),split=mixAudioContext.createChannelSplitter(2),merge=mixAudioContext.createChannelMerger(2),gains={};input.connect(split);
+ for(const [i,label] of ['L','R'].entries()){const gain=mixAudioContext.createGain();gain.gain.value=outputLevels793[label];split.connect(gain,i);gain.connect(merge,0,i);gains[label]=gain;}
+ merge.connect(mixAudioContext.destination);outputBus793={context:mixAudioContext,input,gains};return input;
+}
+function silenceRanges793(track){return stemCrop[track]?.silences||[];}
+function silenced793(track,time){return silenceRanges793(track).some(([a,b])=>time>=a&&time<b);}
+function mergeSilence793(ranges){const sorted=ranges.filter(([a,b])=>Number.isFinite(a)&&Number.isFinite(b)&&b>a).sort((a,b)=>a[0]-b[0]),result=[];for(const r of sorted){const last=result.at(-1);if(last&&r[0]<=last[1])last[1]=Math.max(last[1],r[1]);else result.push([...r]);}return result;}
+function silenceBuffer793(buffer,track,context){const ranges=silenceRanges793(track);if(!ranges.length)return buffer;const copy=context.createBuffer(buffer.numberOfChannels,buffer.length,buffer.sampleRate);for(let ch=0;ch<buffer.numberOfChannels;ch++){const data=copy.getChannelData(ch);data.set(buffer.getChannelData(ch));for(const [a,b] of ranges)data.fill(0,Math.max(0,Math.floor(a*buffer.sampleRate)),Math.min(buffer.length,Math.ceil(b*buffer.sampleRate)));}return copy;}
+(()=>{
+ const $=id=>document.getElementById(id),actions=[];stemCrop.master??={in:0,out:null,silences:[]};for(const track of stemIds)stemCrop[track].silences??=[];
+ const css=document.createElement('style');css.textContent=`
+ .legacy793{display:none!important}.track-controls.head793{display:flex!important;flex-direction:column!important;gap:5px!important;padding-bottom:8px!important;min-height:0!important;height:auto!important;justify-content:flex-start!important}
+ .head793 .track-title{display:flex!important;align-items:center;gap:4px;flex-wrap:nowrap;width:100%;min-width:0;white-space:nowrap}.head793 .track-title>span{min-width:0}.head793 .track-title .track-buttons{display:flex;gap:3px;margin-left:auto}.head793 button{min-width:0;white-space:nowrap;padding:4px 5px!important;font-size:10px!important}.head793 .volume-row{width:100%;margin:0!important}.head793 .actions793,.head793 .rec793{display:flex;gap:4px;width:100%}.head793 .actions793 button,.head793 .rec793 button{flex:1}.head793 #micRecord770{background:#800020;color:white}.head793 #recordMasterBtn{background:linear-gradient(100deg,#7336a7,#3158bd,#187c76,#779328,#bc7429,#a72c4c);color:white;text-shadow:0 1px 2px #000}.head793 button:disabled{opacity:.45}.master-groups793{display:flex;gap:2px}.head793 .master-groups793 button{font-size:8px!important;padding:3px 2px!important}.master-groups793 .active{background:#777}.silence793{position:absolute;top:0;bottom:0;background:rgba(110,110,110,.45);z-index:2;cursor:pointer}.level793{height:125px;width:22px;writing-mode:vertical-lr;direction:rtl;touch-action:none}.meter-control793{display:flex;align-items:center;gap:5px}.meter-control793 .meter-scale770{flex-shrink:0}
+ `;document.head.append(css);
+ function button(text,fn){const b=document.createElement('button');b.type='button';b.textContent=text;b.onclick=fn;return b;}
+ function scope(){return hasSelection()?'selection':'full';}
+ function row(track){return document.querySelector('.timeline-scroll[data-track="'+track+'"]')?.closest('.track');}
+ function export793(track){exportTargetTrack=track;exportTargetScope=scope();masterExportDialog.classList.add('open');}
+ function controls(track){return row(track)?.querySelector('.track-controls');}
+ function update(){for(const {track,kind,b} of actions){const selected=hasSelection();b.title=kind+' '+(selected?'Selection':'Track');if(track==='original')b.textContent=b.title;const available=track==='original'?!!(currentOriginalTrackFile||currentOriginalFile):track==='master'?!!masterBlob:!!waveformData[track];b.disabled=!available||masterRecording||masterRecordArmed||rec780.busy;}}
+ function paint(){for(const track of [...stemIds,'master']){const timeline=track==='master'?$('masterTrackTimeline'):timelines[track];if(!timeline)continue;const crop=stemCrop[track],end=waveformData[track]?.duration||duration;if(crop&&end>0&&(crop.in>0||crop.out!=null)){const ranges=[...silenceRanges793(track)];if(crop.in>0)ranges.push([0,Math.min(end,crop.in)]);if(crop.out!=null&&crop.out<end)ranges.push([Math.max(0,crop.out),end]);crop.silences=mergeSilence793(ranges);crop.in=0;crop.out=null;updateCropMasks();}timeline.querySelectorAll('.silence793').forEach(n=>n.remove());for(const [a,b] of silenceRanges793(track)){const mask=document.createElement('div');mask.className='silence793';mask.style.left=a*pixelsPerSecond+'px';mask.style.width=(b-a)*pixelsPerSecond+'px';mask.title='Double-click to restore sound';mask.addEventListener('dblclick',e=>{e.preventDefault();e.stopPropagation();pushSequencerHistorySnapshot();stemCrop[track].silences=silenceRanges793(track).filter(r=>r[0]!==a||r[1]!==b);applyMix();paint();});timeline.append(mask);}}}
+ function silence(track){const end=waveformData[track]?.duration||duration;if(!end)return;pushSequencerHistorySnapshot();stemCrop[track].silences=mergeSilence793([...silenceRanges793(track),hasSelection()?[Math.max(0,fragmentStart),Math.min(end,fragmentEnd)]:[0,end]]);applyMix();paint();}
+ async function clear(track){if(!hasSelection()){await clearRec780(track);return;}if(masterRecording||masterRecordArmed||rec780.busy)return;const a=fragmentStart,b=fragmentEnd,next=[];pushRec780(track);rec780.busy=true;updateRecControls780();try{for(const segment of recordingSegments780(track)){const end=segment.start+segment.buffer.duration;for(const [left,right] of [[segment.start,Math.min(end,a)],[Math.max(segment.start,b),end]]){if(right<=left)continue;const buffer=segment.buffer,first=Math.round((left-segment.start)*buffer.sampleRate),last=Math.min(buffer.length,Math.round((right-segment.start)*buffer.sampleRate));if(last<=first)continue;const part=new AudioBuffer({length:last-first,numberOfChannels:buffer.numberOfChannels,sampleRate:buffer.sampleRate});for(let ch=0;ch<part.numberOfChannels;ch++)part.copyToChannel(buffer.getChannelData(ch).subarray(first,last),ch);next.push({start:left,buffer:part});}}
+ if(track==='master'){masterSegments=next;await restoreMasterFromSegments();}else{rec780.micSegments=next;await rebuildMic780();}
+ }finally{rec780.busy=false;updateRecControls780();update();}}
+ async function save(track){if(!hasSelection()){saveRec780(track);return;}if(masterRecording||masterRecordArmed||rec780.busy)return;const source=waveformData[track];if(!source)return;pushRec780(track);const ctx=new AudioContext();try{let prior=track==='master'?(savedMasterBlob?await ctx.decodeAudioData(await savedMasterBlob.arrayBuffer()):null):rec780.micSaved;const length=Math.max(source.length,prior?Math.ceil(prior.duration*source.sampleRate):0),saved=ctx.createBuffer(source.numberOfChannels,length,source.sampleRate);const a=Math.max(0,Math.floor(fragmentStart*source.sampleRate)),b=Math.min(source.length,Math.ceil(fragmentEnd*source.sampleRate));for(let ch=0;ch<saved.numberOfChannels;ch++){const out=saved.getChannelData(ch);if(prior){const input=prior.getChannelData(Math.min(ch,prior.numberOfChannels-1));for(let i=0;i<out.length&&i/source.sampleRate<prior.duration;i++)out[i]=input[Math.floor(i*prior.sampleRate/source.sampleRate)];}out.set(source.getChannelData(ch).subarray(a,b),a);}if(track==='master')savedMasterBlob=audioBufferToWavBlob(saved);else rec780.micSaved=saved;status.textContent=(track==='master'?'Master':'Microphone')+' Selection saved';status.className='progress-status success';}finally{await ctx.close();updateRecControls780();update();}}
+ function action(track,kind,fn,parent){const b=button(kind,fn);actions.push({track,kind,b});parent.append(b);return b;}
+ for(const track of ['original',...stemIds,'master']){
+ const head=controls(track);if(!head)continue;head.classList.add('head793');const title=head.querySelector('.track-title'),volume=head.querySelector('.volume-row');
+ head.querySelectorAll('[data-export-track],.crop-row,[id$="CropInBtn"],[id$="CropOutBtn"],.master-rec-commit-buttons').forEach(n=>n.classList.add('legacy793'));
+ if(track==='original'){const actionsRow=head.querySelector('.track-save-row');actionsRow?.classList.add('legacy793');action(track,'Export',()=>export793(track),title);head.append(volume);continue;}
+ const rec=track==='master'||track==='microphone';
+ if(rec){head.querySelectorAll('.track-buttons').forEach(n=>n.classList.add('legacy793'));if(track==='microphone'){const pair=document.createElement('div');pair.className='track-buttons';pair.append($('microphoneMuteBtn'),$('microphoneSoloBtn'));title.append(pair);}
+ else{const groups=document.createElement('span');groups.className='master-groups793';for(const [id,name] of [['mixModeBtn','Stems'],['effectsModeBtn','Effects'],['inputsModeBtn','Inputs']]){const b=button(name,()=>$(id).click());b.dataset.proxy=id;groups.append(b);}title.prepend(groups);}
+ head.append(volume);const r=document.createElement('div');r.className='rec793';r.append($(track==='master'?'recordMasterBtn':'micRecord770'),$(track==='master'?'stopMasterBtn':'micStopRecord770'));head.append(r);
+ }else{const old=head.querySelector('.track-save-row');old?.classList.add('legacy793');}
+ const ar=document.createElement('div');ar.className='actions793';head.append(ar);action(track,'Export',()=>export793(track),ar);
+ if(rec){action(track,'Clear',()=>clear(track).catch(e=>console.error(e)),ar);action(track,'Save',()=>save(track).catch(e=>console.error(e)),ar);}else action(track,'Silence',()=>silence(track),ar);
+ }
+ // Empty legacy rows have no visual footprint, while existing IDs remain available to legacy handlers.
+ document.querySelectorAll('.head793>.track-buttons,.head793>.track-save-row').forEach(n=>{if(!n.querySelector('button:not(.legacy793)')||n.classList.contains('legacy793'))n.classList.add('legacy793');});
+ for(const name of ['updateSelectionButtons','updateRecControls780','updateCropButtons','refreshGroups782']){
+ const old=name==='updateSelectionButtons'?updateSelectionButtons:name==='updateRecControls780'?updateRecControls780:name==='updateCropButtons'?updateCropButtons:refreshGroups782;
+ const wrapped=function(...args){const result=old.apply(this,args);update();return result;};
+ if(name==='updateSelectionButtons')updateSelectionButtons=wrapped;else if(name==='updateRecControls780')updateRecControls780=wrapped;else if(name==='updateCropButtons')updateCropButtons=wrapped;else refreshGroups782=wrapped;
+ }
+ const oldDraw=drawAllWaveforms;drawAllWaveforms=function(...args){const r=oldDraw.apply(this,args);paint();update();return r;};
+ $('micRecord770').textContent='REC On';$('micStopRecord770').textContent='REC Off';
+ const oldRestore=applySequencerHistoryState;applySequencerHistoryState=function(state){oldRestore(state);paint();update();};
+ const oldClear=clearProjectState;clearProjectState=function(...args){const result=oldClear.apply(this,args);for(const track of [...stemIds,'master'])if(stemCrop[track])stemCrop[track].silences=[];paint();update();return result;};
+ for(const host of document.querySelectorAll('[data-meter770]')){const label=host.dataset.meter770,input=document.createElement('input');input.type='range';input.className='level793';input.min=0;input.max=100;input.value=label==='Mic'?lyricsFullScreenMicRange.value:100;input.setAttribute('aria-label',label==='Mic'?'Microphone input level':label+' output level');input.title=input.getAttribute('aria-label');const scale=host.querySelector('.meter-scale770'),wrap=document.createElement('div');wrap.className='meter-control793';scale.before(wrap);wrap.append(scale,input);input.oninput=()=>{if(label==='Mic'){lyricsFullScreenMicRange.value=input.value;lyricsFullScreenMicRange.dispatchEvent(new Event('input',{bubbles:true}));}else{outputLevels793[label]=Number(input.value)/100;if(outputBus793)outputBus793.gains[label].gain.value=outputLevels793[label];}};if(label==='Mic')lyricsFullScreenMicRange.addEventListener('input',()=>input.value=lyricsFullScreenMicRange.value);}
+ paint();update();refreshGroups782();
+})();
+
+</script>
 </body>
 </html>
