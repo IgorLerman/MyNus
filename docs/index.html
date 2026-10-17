@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>Rec offset | 7.9.8 </title>
+  <title>RecCalibrate&Repeat Fix| 7.9.9 </title>
 
 
  <style>
@@ -3429,7 +3429,7 @@ window.addEventListener('keydown',event=>{
 <script>
 window.addEventListener('keydown',event=>{
  const area=document.getElementById('mnConsoleText');
- if(!area?.contains(event.target))return;
+ if(!area?.contains(event.target))return;if(event.code==='Space')return;
  if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='a'){event.preventDefault();const range=document.createRange();range.selectNodeContents(area);const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);}
  event.stopImmediatePropagation();
 },true);
@@ -7250,7 +7250,7 @@ async function startSeparation(restoreRequest = null, resumeJob760 = null) {
       aborted: false, serverFinished: false, abortError: "",
       previousStudioDisplay: studio.style.display
     };
-    run.restore = restore;
+    run.restore = restore;run.sourceName799=file.name;
     window.pendingMynusRestore = null;
     activeSeparation = run;
     updateSplitButton();
@@ -7406,7 +7406,6 @@ async function startSeparation(restoreRequest = null, resumeJob760 = null) {
       await waitForPaidResult760(data,run);
       status.textContent = "Downloading tracks for local project...";
       await retainSeparatedTracksLocally(data, run);
-      sessionStorage.removeItem("mynusPendingResult760");window.dispatchEvent(new Event("mynus-result-state"));
 
 
       singerSegments =
@@ -7797,7 +7796,7 @@ studio.style.display =
 
       if (run.restore) await restoreMynusSnapshot(run.restore);
       await fitEntireProjectTimeline();
-      run.succeeded = true;
+      run.succeeded = true;sessionStorage.removeItem("mynusPendingResult760");window.dispatchEvent(new Event("mynus-result-state"));
 
       // Разделение завершено. Предлагаем создать Project для полной работы Karaoke.
       newProjectPromptDialog?.classList.add("open");
@@ -8712,8 +8711,8 @@ function applySequencerHistoryState(state) {
     projectTrimEnd = state.trimEnd == null
       ? null
       : (Number.isFinite(Number(state.trimEnd)) ? Math.max(projectTrimStart, Number(state.trimEnd)) : null);
-    projectFadeEnd = Number.isFinite(Number(state.fadeEnd)) ? Number(state.fadeEnd) : null;
-    projectFadeStart = Number.isFinite(Number(state.fadeStart)) ? Number(state.fadeStart) : null;
+    projectFadeEnd = state.fadeEnd != null && Number.isFinite(Number(state.fadeEnd)) ? Number(state.fadeEnd) : null;
+    projectFadeStart = state.fadeStart != null && Number.isFinite(Number(state.fadeStart)) ? Number(state.fadeStart) : null;
 
     if (originalVolume && Number.isFinite(Number(state.originalVolume))) {
       originalVolume.value = String(state.originalVolume);
@@ -11906,6 +11905,7 @@ async function startMasterRecordingLegacy780() {
 function beginMasterCaptureAt(startTime) {
  if(!Number.isFinite(Number(startTime)))return;
  masterRecordArmed=false;masterRecordTimelineStart=Number(startTime);masterRecordTimelineEnd=Number(startTime);
+ if(rec780.target==='microphone')microphoneAudio.muted=true;
  rec780.before=snapshotRec780(rec780.target);
  rec780.offsetMs798=readMicOffset798();
  if(rec780.target==='master'){waveformData.master=null;masterBlob=null;clearMasterCanvas();}
@@ -11919,7 +11919,7 @@ function stopMasterRecording(){
  if(masterRecordArmed&&!masterRecording){masterRecordArmed=false;masterRecordSelectionMode=false;disconnectMicCapture780();microphoneAudio.muted=false;setRecordingState780('No Records');updateRecControls780();return;}
  if(!masterRecording)return;
  masterRecording=false;masterRecordArmed=false;masterRecordSelectionMode=false;masterRecordTimelineEnd=getCurrentTime();
- stopMasterWaveformCapture();finishMasterRecording();
+ stopMasterWaveformCapture();return finishMasterRecording();
 }
 
 
@@ -12025,13 +12025,13 @@ async function startMasterRecording(target='master'){
  rec780.target=target;
  try{
   if(target==='microphone'){
-   ensureMixAudioGraph();microphoneAudio.muted=true;
+   ensureMixAudioGraph();microphoneAudio.muted=false;
    micCaptureInput780=window.mynusMicrophone770.input();
    micCapture780=mixAudioContext.createScriptProcessor(2048,2,2);micSilent780=mixAudioContext.createGain();micSilent780.gain.value=0;
    micCaptureInput780.connect(micCapture780);micCapture780.connect(micSilent780);micSilent780.connect(outputDestination793());
    micCapture780.onaudioprocess=captureMicPcm781;
   }
-  await startMasterRecordingLegacy780();updateRecControls780();
+  if(repeat799.enabled)await armRepeatRecording799(target);else await startMasterRecordingLegacy780();updateRecControls780();
  }catch(e){masterRecording=false;masterRecordArmed=false;disconnectMicCapture780();microphoneAudio.muted=false;setRecordingState780('Recording error');console.error(e);updateRecControls780();}
 }
 function recordingSegments780(track){return track==='master'?masterSegments:rec780.micSegments;}
@@ -12082,7 +12082,7 @@ async function finishMasterRecording(){
   const segment=mixAudioContext.createBuffer(2,frames,masterPcmSampleRate);let offset=0;
   for(const chunk of masterPcmChunks){const count=Math.min(chunk[0].length,frames-offset);if(count<=0)break;for(let c=0;c<2;c++)segment.getChannelData(c).set(chunk[Math.min(c,chunk.length-1)].subarray(0,count),offset);offset+=count;}
   if(epoch!==rec780.epoch)return;
-  rec780.undo.push(rec780.before||snapshotRec780(target));rec780.redo=[];const placement798=target==='microphone'?compensateMic798(segment,start,rec780.offsetMs798??100):{start,buffer:segment};
+  rec780.undo.push(rec780.before||snapshotRec780(target));rec780.redo=[];const placement798=target==='microphone'?clipPunch799(compensateMic798(segment,start,rec780.offsetMs798??100),rec780.punch799?{a:rec780.punch799.a,b:Math.min(rec780.punch799.b,masterRecordTimelineEnd)}:null):{start,buffer:segment};
   const next=placement798.buffer?replaceRecSegments780(recordingSegments780(target),placement798.start,placement798.buffer):recordingSegments780(target);
   if(target==='master'){masterSegments=next;await rebuildMasterTrack();drawMasterCompositeWaveform();saveAsMasterBtn.disabled=false;saveMasterSelectionBtn.disabled=!hasSelection();}
   else{rec780.micSegments=next;await rebuildMic780();window.mynusMicrophone770.monitorOff();}
@@ -12115,7 +12115,7 @@ function saveRec780(track){
  pushRec780(track);
  if(track==='master'){savedMasterBlob=masterBlob;setMasterState('Saved successfully');}
  else{if(!rec780.micSegments.length)rec780.micSegments=[{start:0,buffer:value}];rec780.micSaved=value;micState780('Saved successfully');}
- status.textContent=(track==='master'?'Master':'Microphone')+' Rec saved successfully';status.className='progress-status success';updateRecControls780();
+ status.textContent=(track==='master'?'Master':'Microphone')+' Rec saved successfully';status.className='progress-status success';console.info(status.textContent);updateRecControls780();
 }
 
 
@@ -20145,6 +20145,7 @@ function startAnimation() {
       }
 
 
+      if(repeat799.enabled&&repeatTick799()){animationFrame=requestAnimationFrame(update);return;}
       keepTracksSynchronized();
 
       applyMix();
@@ -20185,13 +20186,13 @@ function startAnimation() {
       }
 
 
-      if (masterRecordArmed && hasSelection() && getCurrentTime() >= fragmentStart) {
+      if (!repeat799.enabled && masterRecordArmed && hasSelection() && getCurrentTime() >= fragmentStart) {
         syncAllTo(fragmentStart);
         beginMasterCaptureAt(fragmentStart);
         updatePlayheads(); updateMasterCursor(); updateTimeDisplay();
       }
 
-      if (masterRecording) {
+      if (!repeat799.enabled && masterRecording) {
 
   if (
     masterRecordSelectionMode
@@ -20217,14 +20218,14 @@ function startAnimation() {
         // LOOP ON:
         // OUT завершает запись
         // и ставит транспорт на Pause.
-        pauseAll();
+        syncAllTo(fragmentStart);
 
         updatePlayheads();
         updateMasterCursor();
         updateTimeDisplay();
         updateLyricsMasterCounter();
 
-        return;
+        animationFrame=requestAnimationFrame(update);return;
 
       }
 
@@ -20284,7 +20285,8 @@ function startAnimation() {
 
 
       if (
-  lyricsStructureTransportMode !== "loop"
+  !repeat799.enabled
+  && lyricsStructureTransportMode !== "loop"
   &&
   !masterRecording
   &&
@@ -20312,7 +20314,7 @@ function startAnimation() {
 }
 
 
-      if (getCurrentTime() >= getProjectPlaybackEnd()) {
+      if (!repeat799.enabled && getCurrentTime() >= getProjectPlaybackEnd()) {
         const playbackEnd = getProjectPlaybackEnd();
 
         syncAllTo(playbackEnd);
@@ -20553,25 +20555,9 @@ zoomOutBtn.addEventListener(
 
 // Локальная функциональная операция этого блока.
 async function fitEntireProjectTimeline() {
-  // Measure only after the studio and loaded tracks have completed layout.
-  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-  const viewports = [masterTimeline, sharedScroll, ...document.querySelectorAll('.timeline-scroll')];
-  const widths = viewports.map(node => node.clientWidth).filter(width => width > 0);
-  if (!(duration > 0) || !widths.length) return;
-  const width = Math.max(1, Math.min(...widths) - 2);
-  pixelsPerSecond = width / duration;
-  zoomValue.textContent = pixelsPerSecond.toFixed(1) + ' px/s';
-  if (zoomValueTop) zoomValueTop.textContent = zoomValue.textContent;
-  sharedScroll.scrollLeft = 0;
-  drawAllWaveforms();
-  drawMasterTimeline();
-  renderSingerSegments();
-  sharedScrollInner.style.width = getTimelineWidth() + 'px';
-  syncScrollTo(0);
-  updateProjectTrimDisplay();
-  updateSelectionDisplay();
-  updatePlayheads();
-  updateMasterCursor();
+ await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+ if(!(duration>0))return;
+ pixelsPerSecond=minimumZoom799();sharedScroll.scrollLeft=0;redrawZoom799();
 }
 
 function changeZoom(
@@ -20591,7 +20577,7 @@ function changeZoom(
 
   const minZoom =
     duration > 0
-    ? viewport / duration
+    ? minimumZoom799()
     : 10;
 
 
@@ -20850,7 +20836,7 @@ function resetToInitialSplit() {
 
   pixelsPerSecond =
     duration > 0
-    ? viewport / duration
+    ? minimumZoom799()
     : 10;
 
 
@@ -21637,7 +21623,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "7.9.8",
+    version: "7.9.9",
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
     current_tonic: currentTrackTonic(),
@@ -21645,9 +21631,7 @@ function projectStateJson() {
     // Сохраняем исходное имя аудиофайла отдельно от имени технической дорожки Original.
     source_audio_name: currentSourceAudioName || currentOriginalFile?.name || null,
     sequencer: {
-      mode,
-      fragmentStart,
-      fragmentEnd,
+
       trimStart: getProjectTrimStart(),
       trimEnd: Number.isFinite(Number(projectTrimEnd)) ? getProjectTrimEnd() : null,
       fadeEnd: projectFadeEnd,
@@ -22491,8 +22475,7 @@ function restoreProjectSequencerState(saved) {
     });
   }
 
-  fragmentStart = Number.isFinite(Number(saved.fragmentStart)) ? Number(saved.fragmentStart) : null;
-  fragmentEnd = Number.isFinite(Number(saved.fragmentEnd)) ? Number(saved.fragmentEnd) : null;
+  fragmentStart = null; fragmentEnd = null; loopEnabled = false;
   projectTrimStart = Number.isFinite(Number(saved.trimStart)) ? Math.max(0, Number(saved.trimStart)) : 0;
   projectTrimEnd = saved.trimEnd == null
   ? null
@@ -22510,7 +22493,7 @@ projectFadeStart =
   saved.fadeStart != null && Number.isFinite(Number(saved.fadeStart))
     ? Number(saved.fadeStart)
     : null;
-  if (["original", "mix", "master"].includes(saved.mode)) mode = saved.mode;
+  mode = "mix";
   syncTrackLevelUi795();
 
 }
@@ -22546,7 +22529,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "7.9.8";
+const MYNUS_CLIENT_VERSION = "7.9.9";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -25644,12 +25627,16 @@ for(const id of ['lyricsUndoBtn','lyricsRedoBtn'])document.getElementById(id).ad
  document.getElementById('splitBtn').after(resume);
  const state=()=>{resume.hidden=mynusLoggedOut760||!sessionStorage.getItem('mynusPendingResult760');};
  window.addEventListener('mynus-session-change',state);window.addEventListener('mynus-result-state',state);state();
- resume.onclick=()=>{
-  if(activeSeparation)return;
-  const pending=JSON.parse(sessionStorage.getItem('mynusPendingResult760')||'null');if(!pending)return;
+ resume.onclick=async()=>{
+  if(activeSeparation){report799('A server operation is already running.');return;}
+  let pending;try{pending=JSON.parse(sessionStorage.getItem('mynusPendingResult760')||'null');}catch(error){report799('Stored result details are invalid. Open Account > Results and select the result again.',true);return;}
+  if(!pending?.job_id){report799('No pending result. Open Account > Results.',true);return;}
   const file=audioFile.files[0]||recentSelectedAudioFile;
-  if(!file||file.name!==pending.source){status.textContent='Select the original audio file "'+pending.source+'", then click Retrieve result.';progressWrap.style.display='block';return;}
-  void startSeparation(null,pending.job_id);
+  const expected=typeof pending.source==='string'&&pending.source.trim()&&pending.source!=='null'?pending.source:null;
+  if(!file||(expected&&file.name!==expected)){report799(expected?'Select the original audio file "'+expected+'", then click Retrieve result.':'Select the original audio file used for this separation, then click Retrieve result.');return;}
+  if(!expected){pending.source=file.name;sessionStorage.setItem('mynusPendingResult760',JSON.stringify(pending));}
+  report799('Retrieving the existing server result…');
+  try{const result=await startSeparation(null,pending.job_id);if(result?.succeeded)report799('Server result retrieved successfully.');else console.warn(status.textContent);}catch(error){report799('Retrieve result failed: '+error.message,true);}
  };
  for(const [label,path,kind] of [['Sessions','/api/account/sessions','sessions'],['Results','/api/separations','results']]){
   const button=document.createElement('button');button.type='button';button.textContent=label;
@@ -25677,7 +25664,7 @@ for(const id of ['lyricsUndoBtn','lyricsRedoBtn'])document.getElementById(id).ad
 })();
 async function waitForPaidResult760(data,run){
  if(data.download_allowed===true)return;
- sessionStorage.setItem('mynusPendingResult760',JSON.stringify({job_id:run.jobId,separation_id:data.separation_id,source:currentSourceAudioName}));
+ sessionStorage.setItem('mynusPendingResult760',JSON.stringify({job_id:run.jobId,separation_id:data.separation_id,source:run.sourceName799||currentSourceAudioName||currentOriginalFile?.name||null}));
  const box=document.createElement('section');box.className='result-access760';box.setAttribute('role','dialog');box.setAttribute('aria-label','Separation result access');
  const title=document.createElement('strong');title.textContent='Separation #'+data.separation_id+' is ready';
  const info=document.createElement('p');info.textContent='Full result requires an active Subscription or OneTime token. File cleanup eligibility: '+(data.delete_after||'24 hours after completion')+'. Cleanup runs daily at server midnight.';
@@ -25698,7 +25685,7 @@ async function waitForPaidResult760(data,run){
     const response=await mynusFetch('/progress/'+encodeURIComponent(run.jobId));
     if(!response.ok)throw new Error(response.mynusFailureMessage||'Result error ('+response.status+').');
     const fresh=await response.json();
-    if(fresh.download_allowed){Object.assign(data,fresh);sessionStorage.removeItem('mynusPendingResult760');done();}
+    if(fresh.download_allowed){Object.assign(data,fresh);done();}
     else message.textContent='No active token is available for this separation. Check the assigned status and token in Payments.';
    }catch(error){message.textContent=error.message;}finally{check.disabled=false;}
   };
@@ -25948,7 +25935,7 @@ async function mountPreview780(box,jobId){
   if(mode==='mix'&&isPlaying&&mixClock782()===originalAudio)await originalAudio.play();
  };
  const oldState=projectStateJson;
- projectStateJson=function(){const state=oldState();state.sequencer.playback_groups=[...mixGroups782];return state;};
+ projectStateJson=function(){const state=oldState();delete state.sequencer.playback_groups;return state;};
  const oldPayload=localProjectPayload;
  localProjectPayload=async function(id){
   const data=await oldPayload(id);mixGroups782.clear();
@@ -26346,7 +26333,7 @@ async function loadExternalKaraoke792(r){
 </script>
 
 <script>
-// MyNus 7.9.8: non-destructive Silence, compact track heads and level controls.
+// MyNus 7.9.9: non-destructive Silence, compact track heads and level controls.
 const outputLevels793={L:1,R:1};let outputBus793=null;
 function outputDestination793(){
  if(outputBus793?.context===mixAudioContext)return outputBus793.input;
@@ -26376,7 +26363,7 @@ function silenceBuffer793(buffer,track,context){const ranges=silenceRanges793(tr
  async function clear(track){if(!hasSelection()){await clearRec780(track);return;}if(masterRecording||masterRecordArmed||rec780.busy)return;const a=fragmentStart,b=fragmentEnd,next=[];pushRec780(track);rec780.busy=true;updateRecControls780();try{for(const segment of recordingSegments780(track)){const end=segment.start+segment.buffer.duration;for(const [left,right] of [[segment.start,Math.min(end,a)],[Math.max(segment.start,b),end]]){if(right<=left)continue;const buffer=segment.buffer,first=Math.round((left-segment.start)*buffer.sampleRate),last=Math.min(buffer.length,Math.round((right-segment.start)*buffer.sampleRate));if(last<=first)continue;const part=new AudioBuffer({length:last-first,numberOfChannels:buffer.numberOfChannels,sampleRate:buffer.sampleRate});for(let ch=0;ch<part.numberOfChannels;ch++)part.copyToChannel(buffer.getChannelData(ch).subarray(first,last),ch);next.push({start:left,buffer:part});}}
  if(track==='master'){masterSegments=next;await restoreMasterFromSegments();}else{rec780.micSegments=next;await rebuildMic780();}
  }finally{rec780.busy=false;updateRecControls780();update();}}
- async function save(track){if(!hasSelection()){saveRec780(track);return;}if(masterRecording||masterRecordArmed||rec780.busy)return;const source=waveformData[track];if(!source)return;pushRec780(track);const ctx=new AudioContext();try{let prior=track==='master'?(savedMasterBlob?await ctx.decodeAudioData(await savedMasterBlob.arrayBuffer()):null):rec780.micSaved;const length=Math.max(source.length,prior?Math.ceil(prior.duration*source.sampleRate):0),saved=ctx.createBuffer(source.numberOfChannels,length,source.sampleRate);const a=Math.max(0,Math.floor(fragmentStart*source.sampleRate)),b=Math.min(source.length,Math.ceil(fragmentEnd*source.sampleRate));for(let ch=0;ch<saved.numberOfChannels;ch++){const out=saved.getChannelData(ch);if(prior){const input=prior.getChannelData(Math.min(ch,prior.numberOfChannels-1));for(let i=0;i<out.length&&i/source.sampleRate<prior.duration;i++)out[i]=input[Math.floor(i*prior.sampleRate/source.sampleRate)];}out.set(source.getChannelData(ch).subarray(a,b),a);}if(track==='master')savedMasterBlob=audioBufferToWavBlob(saved);else rec780.micSaved=saved;status.textContent=(track==='master'?'Master':'Microphone')+' Selection saved';status.className='progress-status success';}finally{await ctx.close();updateRecControls780();update();}}
+ async function save(track){if(!hasSelection()){saveRec780(track);return;}if(masterRecording||masterRecordArmed||rec780.busy)return;const source=waveformData[track];if(!source)return;pushRec780(track);const ctx=new AudioContext();try{let prior=track==='master'?(savedMasterBlob?await ctx.decodeAudioData(await savedMasterBlob.arrayBuffer()):null):rec780.micSaved;const length=Math.max(source.length,prior?Math.ceil(prior.duration*source.sampleRate):0),saved=ctx.createBuffer(source.numberOfChannels,length,source.sampleRate);const a=Math.max(0,Math.floor(fragmentStart*source.sampleRate)),b=Math.min(source.length,Math.ceil(fragmentEnd*source.sampleRate));for(let ch=0;ch<saved.numberOfChannels;ch++){const out=saved.getChannelData(ch);if(prior){const input=prior.getChannelData(Math.min(ch,prior.numberOfChannels-1));for(let i=0;i<out.length&&i/source.sampleRate<prior.duration;i++)out[i]=input[Math.floor(i*prior.sampleRate/source.sampleRate)];}out.set(source.getChannelData(ch).subarray(a,b),a);}if(track==='master'){savedMasterBlob=audioBufferToWavBlob(saved);setMasterState('Selection saved');}else{rec780.micSaved=saved;micState780('Selection saved');}console.info((track==='master'?'Master':'Microphone')+' Selection saved');status.textContent=(track==='master'?'Master':'Microphone')+' Selection saved';status.className='progress-status success';}finally{await ctx.close();updateRecControls780();update();}}
  function action(track,kind,fn,parent){const b=button(kind,fn);actions.push({track,kind,b});parent.append(b);return b;}
  for(const track of ['original',...stemIds,'master']){
  const head=controls(track);if(!head)continue;const title=head.querySelector('.track-title'),volume=head.querySelector('.volume-row');
@@ -26388,7 +26375,7 @@ function silenceBuffer793(buffer,track,context){const ranges=silenceRanges793(tr
  head.append(volume);const r=document.createElement('div');r.className='track-buttons rec793';r.append($(track==='master'?'recordMasterBtn':'micRecord770'),$(track==='master'?'stopMasterBtn':'micStopRecord770'));head.append(r);
  }else{const old=head.querySelector('.track-save-row');old?.classList.add('legacy793');}
  const ar=document.createElement('div');ar.className='track-save-row actions793';head.append(ar);action(track,'Export',()=>export793(track),ar);
- if(rec){action(track,'Clear',()=>clear(track).catch(e=>console.error(e)),ar);action(track,'Save',()=>save(track).catch(e=>console.error(e)),ar);}else action(track,'Silence',()=>silence(track),ar);
+ if(rec){action(track,'Clear',()=>clear(track).catch(e=>console.error(e)),ar);action(track,'Save',()=>save(track).catch(e=>report799('Save failed: '+e.message,true)),ar);}else action(track,'Silence',()=>silence(track),ar);
  }
  // Empty legacy rows have no visual footprint, while existing IDs remain available to legacy handlers.
  document.querySelectorAll('.track-controls>.track-buttons,.track-controls>.track-save-row').forEach(n=>{if(!n.querySelector('button:not(.legacy793)')||n.classList.contains('legacy793'))n.classList.add('legacy793');});
@@ -26421,7 +26408,7 @@ function silenceBuffer793(buffer,track,context){const ranges=silenceRanges793(tr
 
 </script>
 <script>
-// MyNus 7.9.8: consistent track state, mono input pan and timeline interactions.
+// MyNus 7.9.9: consistent track state, mono input pan and timeline interactions.
 var microphoneChannelCache795;
 function microphoneChannel795(){microphoneChannelCache795??=new WeakMap();const b=waveformData.microphone;if(!b||b.numberOfChannels<2)return 0;if(microphoneChannelCache795.has(b))return microphoneChannelCache795.get(b);const energy=[0,0];for(let ch=0;ch<2;ch++){const data=b.getChannelData(ch);for(let i=0;i<data.length;i+=32)energy[ch]+=data[i]*data[i];}const channel=energy[1]>energy[0]?1:0;microphoneChannelCache795.set(b,channel);return channel;}
 function createMicrophonePan795(context){
@@ -26455,7 +26442,7 @@ function bindSilence795(mask,track,a,b){
   const move=e=>{if(!dragging)return;e.preventDefault();e.stopImmediatePropagation();const timeline=marker.parentElement,rect=timeline.getBoundingClientRect(),t=(e.clientX-rect.left)/rect.width*duration;setGlobalCursorTime(Math.max(getProjectTrimStart(),Math.min(getProjectTrimEnd(),t)));};
   marker.addEventListener('pointermove',move);marker.addEventListener('pointerup',e=>{if(!dragging)return;move(e);dragging=false;if(marker.hasPointerCapture(e.pointerId))marker.releasePointerCapture(e.pointerId);});marker.addEventListener('pointercancel',()=>dragging=false);
  }
- masterTimelineInner.addEventListener('pointermove',e=>{if(selectionDragging)return;const rect=masterTimelineInner.getBoundingClientRect(),x=e.clientX-rect.left;const within=hasSelection()&&x>=fragmentStart/duration*rect.width-8&&x<=fragmentEnd/duration*rect.width+8;masterTimelineInner.style.cursor=within?'ew-resize':'pointer';});
+ masterTimelineInner.addEventListener('pointermove',e=>{if(selectionDragging)return;const rect=masterTimelineInner.getBoundingClientRect(),x=e.clientX-rect.left;const edge=hasSelection()&&(Math.abs(x-fragmentStart/duration*rect.width)<=8||Math.abs(x-fragmentEnd/duration*rect.width)<=8);masterTimelineInner.style.cursor=edge?'ew-resize':'pointer';});
  document.querySelectorAll('.silence793').forEach(mask=>{ /* Existing masks will be rebuilt by the shared painter below. */ });
  drawAllWaveforms();
 })();
@@ -26541,7 +26528,7 @@ function navigationUi796(key){
  else if(key==='Tab')setUiMode(isKaraokeUiMode()?UI_MODE.LYRICS:(isLyricsUiOpen()?UI_MODE.KARAOKE:UI_MODE.LYRICS));
 }
 window.addEventListener('keydown',e=>{
- const k=e.key,code=e.code;if(e.metaKey)return;
+ if(document.querySelector('.calibration-overlay799'))return;const k=e.key,code=e.code;if(e.metaKey)return;
  // Escape/Tab navigation also works after editing a lyric text field.
  if((k==='Escape'||k==='Tab')&&!e.ctrlKey&&!e.altKey){e.preventDefault();e.stopImmediatePropagation();if(!e.repeat)navigationUi796(k);return;}
  if(isTypingTarget(e.target))return;
@@ -26594,7 +26581,7 @@ alignFullScreenMeters780=function(){
 
 </script>
 <script>
-// 7.9.8: pending Input edit is isolated from confirmed media used by Save/Export.
+// 7.9.9: pending Input edit is isolated from confirmed media used by Save/Export.
 const edits797=new Map(),editButtons797=new Map(),creationBusy797=new Set(),editedTracks797=new Set();
 const buffers797=new Map(),bufferIds797=new WeakMap();let nextBuffer797=1,editInstall797=false,restoreEpoch797=0;
 for(const id of Object.keys(fxSettings))fxSettings[id].bypass=!!fxSettings[id].bypass;
@@ -26664,7 +26651,7 @@ async function beginEdit797(id){
 }
 async function confirmEdit797(id){
  const edit=edits797.get(id);if(!edit||edit.confirming||masterRecording||masterRecordArmed||rec780.busy)return;
- edit.confirming=true;pushSequencerHistorySnapshot();window.editCommitting797=true;updateSequencerUndoRedoButtons();ensureMixAudioGraph();const rendered=renderEdit797(edit,mixAudioContext);
+ edit.confirming=true;pushRec780(id);window.editCommitting797=true;updateSequencerUndoRedoButtons();ensureMixAudioGraph();const rendered=renderEdit797(edit,mixAudioContext);
  try{editInstall797=true;await installGeneratedTrack(id,rendered);stemCrop[id].silences=[];stemCrop[id].in=0;stemCrop[id].out=null;
   if(id==='microphone'){rec780.micSegments=[{start:0,buffer:rendered}];rec780.micSaved=rendered;}
   discardEdit797(id,false);drawAllWaveforms();applyMix();updateRecControls780();fxProcessUi796(id+' — Edit confirmed (mixdown)');
@@ -26682,8 +26669,8 @@ function bindEdit797(mask,id){
 function renderEditRegions797(){
  for(const id of inputIds797()){
   const row=trackRowUi796(id),timeline=timelines[id];if(!row||!timeline)continue;
-  let button=editButtons797.get(id);if(!button){button=document.createElement('button');button.type='button';button.className='edit-button797';button.onclick=e=>{e.stopPropagation();beginEdit797(id).catch(error=>fxProcessUi796(error.message,true));};row.append(button);editButtons797.set(id,button);}
-  const edit=edits797.get(id);button.textContent=edit?'Move':'Edit';button.title=edit?'Drag the yellow region or its edges; double-click to confirm':'Edit the selected audio';button.disabled=masterRecording||masterRecordArmed||rec780.busy||!waveformData[id]||!!window.historyRestore797;
+  let button=editButtons797.get(id);if(!button){button=document.createElement('button');button.type='button';button.className='edit-button797';button.onclick=e=>{e.stopPropagation();if(edits797.has(id)){cancelEdit799(id);return;}beginEdit797(id).catch(error=>fxProcessUi796(error.message,true));};row.append(button);editButtons797.set(id,button);}
+  const edit=edits797.get(id);button.textContent=edit?'Move':'Edit';button.title=edit?'Drag the yellow region or its edges; double-click to confirm':'Edit the selected audio';button.disabled=typeof editBlock799==='function'?!!editBlock799(id):(masterRecording||masterRecordArmed||rec780.busy||!waveformData[id]);button.title=(typeof editBlock799==='function'?editBlock799(id):'')||(edit?'Move audio; click Move to cancel, double-click region to confirm':'Edit the selected audio');
   timeline.querySelectorAll('.edit-region797').forEach(n=>n.remove());if(!edit)continue;
   const mask=document.createElement('div');mask.className='edit-region797';mask.style.left=edit.destStart*pixelsPerSecond+'px';mask.style.width=(editEnd797(edit)-edit.destStart)*pixelsPerSecond+'px';mask.title='Double-click to confirm Edit';
   for(const side of ['left','right']){const edge=document.createElement('span');edge.className='edit-edge797 '+side;edge.dataset.editEdge797=side;mask.append(edge);}rangeBadges797(mask,edit.destStart,editEnd797(edit));bindEdit797(mask,id);timeline.append(mask);
@@ -26798,6 +26785,319 @@ function compensateMic798(buffer,start,milliseconds){
  // Keep transport shortcuts from handling keys while editing this setting.
  for(const type of ['keydown','keyup'])input.addEventListener(type,event=>{event.stopImmediatePropagation();if(type==='keydown'&&event.key==='Enter'){event.preventDefault();commit();input.blur();}});
 })();
+</script>
+<style>.shortcut-popup{width:570px!important;max-width:calc(100vw - 32px);box-sizing:border-box;max-height:75vh;overflow:auto;pointer-events:auto}
+.shortcut-popup .shortcut-line{display:grid!important;grid-template-columns:155px minmax(0,1fr);gap:16px;align-items:start;margin:3px 0;white-space:normal}
+.shortcut-popup .shortcut-key{width:auto!important;min-width:0;white-space:normal;overflow-wrap:anywhere}
+.keys-heading799{font:bold 12px/1.5 Arial;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #666;color:#c6e8bf}
+.repeat-button799.active{background:#b4dbb5!important;color:#153b1a!important}.repeat-button799:disabled{opacity:.4}
+.track-selection-overlay,.selection-range{cursor:pointer!important}.edit-region797{cursor:default!important}.edit-edge797{cursor:ew-resize!important}
+#calibrate799{font:10px Arial;padding:3px 5px;min-height:20px;white-space:nowrap}.mic-heading798{gap:4px;flex-wrap:wrap}.mic-heading798 strong{margin-right:auto}
+.calibration-overlay799{position:fixed;inset:0;z-index:100000;background:#0009;display:flex;align-items:center;justify-content:center;padding:20px}.calibration-card799{background:white;color:#222;border-radius:10px;padding:22px;max-width:480px;width:100%;box-sizing:border-box;font:14px/1.5 Arial}.calibration-card799 h3{margin:0 0 12px}.calibration-card799 .buttons799{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}.calibration-card799 button{background:#222;color:white;border:0;border-radius:5px;padding:8px 15px}.calibration-card799 button:disabled{opacity:.45}.calibration-card799 progress{width:100%}
+@media(max-width:600px){.shortcut-popup .shortcut-line{grid-template-columns:110px minmax(0,1fr);gap:10px}}
+
+#lyricsFullScreenKeysMenu{width:500px;max-width:calc(100vw - 32px);box-sizing:border-box;max-height:70vh;overflow:auto}#lyricsFullScreenKeysMenu>div:not(.keys-heading799){display:grid;grid-template-columns:110px minmax(0,1fr);gap:18px}#lyricsFullScreenKeysMenu>.keys-heading799{display:block}
+</style>
+<script>/* 7.9.9 — transport, editing, recording history and calibration. */
+function report799(message,error=false,rec=false){
+ const label=rec?document.getElementById('masterState'):status;
+ if(label)label.textContent=message;
+ if(!rec){status.className='progress-status '+(error?'error':'success');progressWrap.style.display='block';}
+ (error?console.error:console.info)(message);
+}
+function visibleTimelineWidth799(){
+ const nodes=[sharedScroll,masterTimeline,...document.querySelectorAll('.timeline-scroll')];
+ const widths=nodes.filter(n=>n&&n.getClientRects().length&&getComputedStyle(n).visibility!=='hidden'&&!n.closest('.track-collapsed')).map(n=>n.clientWidth).filter(w=>Number.isFinite(w)&&w>32);
+ return widths.length?Math.max(1,Math.min(...widths)-2):null;
+}
+function minimumZoom799(){const width=visibleTimelineWidth799();return duration>0?(width||600)/duration:10;}
+function redrawZoom799(){
+ if(!(duration>0))return;
+ zoomValue.textContent=pixelsPerSecond.toFixed(pixelsPerSecond<.1?3:1)+' px/s';if(zoomValueTop)zoomValueTop.textContent=zoomValue.textContent;
+ sharedScrollInner.style.width=getTimelineWidth()+'px';drawAllWaveforms();drawMasterTimeline();renderSingerSegments();syncScrollTo(sharedScroll.scrollLeft||0);updateProjectTrimDisplay();updateSelectionDisplay();updatePlayheads();updateMasterCursor();
+}
+let widthLast799=null,resizeQueued799=false;
+new ResizeObserver(()=>{
+ if(resizeQueued799)return;resizeQueued799=true;requestAnimationFrame(()=>{resizeQueued799=false;const width=visibleTimelineWidth799();if(!width||!(duration>0))return;
+ const old=widthLast799; widthLast799=width;const fitted=old===null||pixelsPerSecond<=old/duration+1e-6;
+ if(fitted||pixelsPerSecond<width/duration){pixelsPerSecond=width/duration;sharedScroll.scrollLeft=0;redrawZoom799();}
+ });
+}).observe(sharedScroll);
+const zoomChange799=changeZoom;changeZoom=function(value){if(!Number.isFinite(value))return;return zoomChange799(Math.max(minimumZoom799(),value));};
+// Transport Space has priority over range/select/button defaults, but not typing or modal dialogs.
+function typing799(target){return !!target&&(target.isContentEditable||target.tagName==='TEXTAREA'||(target.tagName==='INPUT'&&!['range','button','checkbox','radio','file','submit','reset'].includes(target.type)));}
+function modalOpen799(){return [...document.querySelectorAll('dialog[open],.export-dialog.open,.modal.open,#saveProjectDialog.open,#loadProjectDialog.open,#mnLoginDialog[open],#newProjectPromptDialog.open,#projectConflictDialog.open,.calibration-overlay799')].some(n=>n.getClientRects().length);}
+window.addEventListener('keydown',e=>{
+ if(e.code!=='Space'||e.ctrlKey||e.altKey||e.metaKey)return;
+ if(typing799(e.target)||modalOpen799())return;
+ if(isLyricsUiOpen()&&!isKaraokeUiMode())return;
+ e.preventDefault();e.stopImmediatePropagation();if(e.repeat)return;
+ if(karaokeFinishedDialog?.classList.contains('open')){runKaraokeFinishAction('again');return;}
+ if(isPlaying)pauseAll();else Promise.resolve(playCurrentMode()).catch(error=>report799(error.message,true));
+ updateLyricsTransportButtons();
+},true);
+window.addEventListener('keyup',e=>{if(e.code==='Space'&&!typing799(e.target)&&!modalOpen799()&&(!isLyricsUiOpen()||isKaraokeUiMode())){e.preventDefault();e.stopImmediatePropagation();}},true);
+for(const popup of document.querySelectorAll('.shortcut-popup')){
+ const heading=document.createElement('div');heading.className='keys-heading799';heading.textContent='Click inside MyNus to enable keyboard shortcuts.';popup.prepend(heading);
+}
+// Availability must be refreshed after a recording's busy flag is released.
+function editBlock799(id){
+ if(masterRecording||masterRecordArmed)return 'Stop recording before editing';
+ if(rec780.busy||window.editCommitting797)return 'Please wait for the current audio operation';
+ if(window.historyRestore797)return 'Please wait for history restoration';
+ if(!waveformData[id])return 'Record or load audio on this track before Edit';
+ if(!edits797.has(id)&&!hasSelection())return 'Select an IN–OUT range before Edit';
+ return '';
+}
+const controls799=updateRecControls780;updateRecControls780=function(...args){const value=controls799(...args);renderEditRegions797();refreshCalibration799();if(repeat799.enabled&&repeat799.intent){const stop=document.getElementById(repeat799.intent==='microphone'?'micStopRecord770':'stopMasterBtn');if(stop)stop.disabled=false;}return value;};
+let groupEdit799=false,groupRefresh799=false;const excludedGroupEdits799=new Set();
+function eligibleEdit799(id){const row=trackRowUi796(id),state=stemState[id],solo=stemIds.some(t=>trackGroupEnabled782(t)&&stemState[t].solo);return !!waveformData[id]&&!!row&&getComputedStyle(row).display!=='none'&&!row.classList.contains('track-collapsed')&&mode==='mix'&&trackGroupEnabled782(id)&&!state.muted&&(!solo||state.solo)&&Number(state.volume)>0;}
+function cancelEdit799(id){excludedGroupEdits799.add(id);pushSequencerHistorySnapshot();discardEdit797(id,true);renderEditRegions797();report799(id+' — Edit cancelled');}
+function refreshGroupEdit799(){
+ if(!groupEdit799||groupRefresh799||window.editCommitting797||masterRecording||masterRecordArmed||rec780.busy||window.historyRestore797)return;
+ groupRefresh799=true;
+ try{for(const id of inputIds797()){
+  if(eligibleEdit799(id)&&!excludedGroupEdits799.has(id)){if(!edits797.has(id)&&hasSelection())beginEdit797(id).catch(e=>report799(e.message,true));}
+  else if(edits797.has(id))discardEdit797(id,true);
+ }}finally{groupRefresh799=false;}
+}
+const visuals799=updateStemPlaybackVisuals;updateStemPlaybackVisuals=function(...args){const result=visuals799(...args);refreshGroupEdit799();return result;};
+const selectDisplay799=updateSelectionDisplay;updateSelectionDisplay=function(...args){const result=selectDisplay799(...args);renderEditRegions797();return result;};
+const collapsedObserver799=new MutationObserver(()=>refreshGroupEdit799());
+for(const id of inputIds797()){const row=trackRowUi796(id);if(row)collapsedObserver799.observe(row,{attributes:true,attributeFilter:['class','style']});}
+function timeAtPointer799(host,e){const rect=host.getBoundingClientRect();return Math.max(0,Math.min(duration,(e.clientX-rect.left)/pixelsPerSecond));}
+function timelineDouble799(e,host){
+ if(e.target.closest('.edit-region797,.silence793,.project-fade-handle,.project-trim-handle'))return;
+ const time=timeAtPointer799(host,e);e.preventDefault();e.stopImmediatePropagation();
+ if(hasSelection()&&time>=fragmentStart&&time<=fragmentEnd){groupEdit799=true;excludedGroupEdits799.clear();refreshGroupEdit799();report799('Edit enabled for active, expanded Input tracks');}
+ else {fragmentStart=fragmentEnd=null;groupEdit799=false;updateSelectionDisplay();updateSelectionButtons();report799('Selection cleared');}
+}
+for(const host of [...Object.values(timelines),masterTimelineInner].filter(Boolean)){
+ host.addEventListener('dblclick',e=>timelineDouble799(e,host),true);
+}
+// A click inside a selection seeks; only an edge drag resizes it.
+masterTimelineInner.addEventListener('pointerdown',e=>{
+ if(e.button!==0||e.target.closest('.project-fade-handle,.project-trim-handle')||!hasSelection())return;
+ const t=timeAtPointer799(masterTimelineInner,e),edge=8/pixelsPerSecond;
+ if(t>fragmentStart+edge&&t<fragmentEnd-edge){e.preventDefault();e.stopImmediatePropagation();setGlobalCursorTime(t);}
+},true);
+// Confirmed PCM belongs to REC History, not general Undo/Redo.
+cloneSequencerHistoryState=function(){
+ const state=historySnapshot797();state.pendingEdits799={};
+ for(const [id,edit]of edits797)state.pendingEdits799[id]={...editData797(edit),confirmed:bufferId797(waveformData[id])};
+ return state;
+};
+applySequencerHistoryState=function(state){
+ if(!state)return;
+ ++restoreEpoch797;window.historyRestore797=true;
+ for(const id of [...edits797.keys()])discardEdit797(id,true);
+ for(const id of Object.keys(fxSettings))fxSettings[id].bypass=!!state.fxSettings?.[id]?.bypass;
+ try{
+  historyApply797(state);
+  const work=[];
+  for(const [id,data]of Object.entries(state.pendingEdits799||{})){
+   const base=buffers797.get(data.base);if(!base||buffers797.get(data.confirmed)!==waveformData[id])continue;
+   const edit={...data,base};edits797.set(id,edit);work.push(previewEdit797(id,edit));
+  }
+  window.editRestorePromise797=Promise.all(work).then(()=>{drawAllWaveforms();refreshBypass797();renderEditRegions797();}).catch(e=>report799('History: '+e.message,true));
+ }finally{window.historyRestore797=false;drawAllWaveforms();refreshBypass797();renderEditRegions797();}
+};
+const generalUndo799=undoSequencer,generalRedo799=redoSequencer;
+undoSequencer=function(){const count=sequencerUndoStack.length;if(window.editCommitting797)return;const r=generalUndo799();if(sequencerUndoStack.length<count)report799('History — Undo');return r;};
+redoSequencer=function(){const count=sequencerRedoStack.length;if(window.editCommitting797)return;const r=generalRedo799();if(sequencerRedoStack.length<count)report799('History — Redo');return r;};
+const recHistory799=historyRec780;
+historyRec780=async function(redo){const from=redo?rec780.redo:rec780.undo,count=from.length;try{await recHistory799(redo);if(from.length<count)report799('REC History — '+(redo?'Redo':'Undo'),false,true);}catch(e){report799('REC History — '+e.message,true,true);}finally{renderEditRegions797();}};
+// Transport values are transient, even when opening legacy saved projects.
+const project799=projectStateJson;projectStateJson=function(){const state=project799();for(const k of ['mode','fragmentStart','fragmentEnd','loopEnabled','repeat','playback_groups','pixelsPerSecond'])delete state.sequencer[k];return state;};
+const restoreProject799=restoreProjectSequencerState;restoreProjectSequencerState=function(state){disableRepeat799();fragmentStart=fragmentEnd=null;loopEnabled=false;const clean={...state,fragmentStart:null,fragmentEnd:null};const r=restoreProject799(clean);fragmentStart=fragmentEnd=null;loopBtn.classList.remove('active');syncTransportMirrors();return r;};
+// Punch protection also applies to compensated mic takes.
+function clipPunch799(placement,punch){
+ if(!placement.buffer||!punch)return placement;
+ const a=Math.max(punch.a,placement.start),b=Math.min(punch.b,placement.start+placement.buffer.duration);
+ if(b<=a)return {start:punch.a,buffer:null};
+ const part=sliceRecBuffer780(placement.buffer,a-placement.start,b-placement.start),rate=part.sampleRate;
+ const result=mixAudioContext.createBuffer(part.numberOfChannels,Math.max(1,Math.round((punch.b-punch.a)*rate)),rate);
+ for(let ch=0;ch<result.numberOfChannels;ch++)result.getChannelData(ch).set(part.getChannelData(ch).subarray(0,result.length-Math.round((a-punch.a)*rate)),Math.round((a-punch.a)*rate));
+ return {start:punch.a,buffer:result};
+}
+const repeat799={enabled:false,anchor:null,cycle:null,intent:null,internal:false,silenceUntil:0,transition:false,generation:0,finishing:null};
+function repeatRange799(selection,start,end,total,anchor,current){
+ const a=selection?Math.max(0,start):0,b=selection?Math.min(total,end):total;
+ let pre=selection?(anchor!==null&&anchor<a?anchor:(current<a?current:Math.max(0,a-5))):-5;
+ pre=Math.min(pre,a);return {a,b,pre,end:Math.min(total,b+5),selected:selection};
+}
+function nextRepeatCycle799(){repeat799.cycle=repeatRange799(hasSelection(),fragmentStart,fragmentEnd,getProjectPlaybackEnd(),repeat799.anchor,getCurrentTime());return repeat799.cycle;}
+const repeatButtons799=[];
+for(const out of [document.getElementById('fragmentEndBtn'),document.querySelector('[data-proxy="fragmentEndBtn"]')].filter(Boolean)){
+ const button=document.createElement('button');button.type='button';button.textContent='Repeat';button.className='repeat-button799';button.title='Extended loop: preroll, IN–OUT recording and postroll';out.after(button);repeatButtons799.push(button);
+ button.onclick=()=>{if(!loopEnabled)return;if(repeat799.enabled){const silent=!!repeat799.silenceUntil;repeat799.enabled=false;repeat799.intent=null;repeat799.generation++;repeat799.cycle=null;repeat799.silenceUntil=0;if(silent){isPlaying=false;if(masterRecordArmed&&!hasSelection()){masterRecordSelectionMode=false;beginMasterCaptureAt(getProjectTrimStart());}playCurrentMode();}else if(!isPlaying&&masterRecordArmed)playCurrentMode();}else{
+ repeat799.enabled=true;repeat799.anchor=hasSelection()&&getCurrentTime()<fragmentStart?getCurrentTime():null;nextRepeatCycle799();restartRepeat799(false).catch(e=>report799(e.message,true));}
+ refreshRepeat799();};
+}
+function refreshRepeat799(){for(const b of repeatButtons799){b.disabled=!loopEnabled;b.classList.toggle('active',repeat799.enabled);b.setAttribute('aria-pressed',String(repeat799.enabled));}}
+function disableRepeat799(){repeat799.generation++;repeat799.enabled=false;repeat799.intent=null;repeat799.cycle=null;repeat799.silenceUntil=0;repeat799.transition=false;refreshRepeat799();}
+const sync799=syncTransportMirrors;syncTransportMirrors=function(...args){const r=sync799(...args);if(pixelsPerSecond>0){const text=(pixelsPerSecond<.1?Number(pixelsPerSecond.toPrecision(3)):pixelsPerSecond.toFixed(1))+' px/s';zoomValue.textContent=text;if(zoomValueTop)zoomValueTop.textContent=text;}if(!loopEnabled&&repeat799.enabled)disableRepeat799();refreshRepeat799();return r;};
+const pause799=pauseAll,play799=playCurrentMode,stopRecord799=stopMasterRecording;
+function pauseInternal799(){repeat799.internal=true;try{pause799();}finally{repeat799.internal=false;}}
+function finalizeTake799(at){
+ if(!masterRecording&&!masterRecordArmed)return Promise.resolve();
+ if(Number.isFinite(at))syncAllTo(at);
+ const monitor=document.getElementById('micMonitor770'),wasMonitoring=monitor?.textContent.includes('On');
+ const promise=Promise.resolve(stopRecord799()).then(()=>{if(wasMonitoring&&repeat799.enabled&&repeat799.intent==='microphone'&&window.mynusMicrophone770.enabled()&&!monitor.textContent.includes('On'))monitor.click();});repeat799.finishing=promise;
+ return promise.finally(()=>{if(repeat799.finishing===promise)repeat799.finishing=null;updateRecControls780();});
+}
+pauseAll=function(){
+ if(!repeat799.internal){repeat799.intent=null;repeat799.generation++;repeat799.silenceUntil=0;if(masterRecording||masterRecordArmed)finalizeTake799().catch(e=>report799(e.message,true,true));}
+ return pause799();
+};
+playCurrentMode=async function(...args){
+ if(calibration799?.busy)return;
+ if(repeat799.enabled){if(!repeat799.cycle)nextRepeatCycle799();const cycle=repeat799.cycle;
+  if(cycle.pre<0&&!isPlaying&&getCurrentTime()<=.001){repeat799.silenceUntil=performance.now()+5000;isPlaying=true;playBtn.textContent='Pause';syncTransportMirrors();startAnimation();return;}
+ }
+ return play799(...args);
+};
+async function restartRepeat799(record){
+ if(!repeat799.enabled)return;
+ const generation=++repeat799.generation;repeat799.transition=true;
+ pauseInternal799();
+ try{if(repeat799.finishing)await repeat799.finishing;if(generation!==repeat799.generation||!repeat799.enabled)return;
+ const cycle=nextRepeatCycle799();syncAllTo(Math.max(0,cycle.pre));updatePlayheads();updateMasterCursor();updateTimeDisplay();
+ if(record&&repeat799.intent){await startMasterRecording(repeat799.intent);}
+ else await playCurrentMode();
+ }finally{if(generation===repeat799.generation)repeat799.transition=false;}
+}
+async function armRepeatRecording799(target){
+ activateMixMode();ensureMixAudioGraph();if(mixAudioContext.state==='suspended')await mixAudioContext.resume();
+ repeat799.intent=target;const cycle=nextRepeatCycle799();rec780.punch799={a:cycle.a,b:cycle.b};
+ pauseInternal799();syncAllTo(Math.max(0,cycle.pre));masterRecordArmed=true;masterRecordSelectionMode=true;microphoneAudio.muted=false;
+ setRecordingState780('Rec armed — pre-roll');updateRecControls780();await playCurrentMode();
+}
+function repeatTick799(){
+ if(!repeat799.enabled)return false;
+ if(repeat799.silenceUntil){
+  if(performance.now()<repeat799.silenceUntil){timeDisplay.textContent=timeDisplayTop.textContent='Pre-roll: '+Math.ceil((repeat799.silenceUntil-performance.now())/1000)+' s';return true;}
+  repeat799.silenceUntil=0;isPlaying=false;play799().catch(e=>report799(e.message,true));return true;
+ }
+ const cycle=repeat799.cycle;if(!cycle)return false;
+ const time=getCurrentTime();
+ if(masterRecordArmed&&repeat799.intent&&time>=cycle.a){syncAllTo(cycle.a);beginMasterCaptureAt(cycle.a);}
+ if(masterRecording&&time>=cycle.b){finalizeTake799(cycle.b).catch(e=>report799(e.message,true,true));}
+ if(time>=cycle.end-.001&&!repeat799.transition){const record=!!repeat799.intent;restartRepeat799(record).catch(e=>report799(e.message,true));return true;}
+ return false;
+}
+// Explicit REC Off starts playback of the expanded loop. Pause does not restart it.
+for(const b of [stopMasterBtn,document.getElementById('micStopRecord770')].filter(Boolean))b.addEventListener('click',e=>{
+ if(!repeat799.enabled)return;e.preventDefault();e.stopImmediatePropagation();repeat799.intent=null;
+ finalizeTake799().then(()=>restartRepeat799(false)).catch(error=>report799(error.message,true));
+},true);
+stopBtn.addEventListener('click',()=>{disableRepeat799();loopEnabled=false;loopBtn.classList.remove('active');refreshRepeat799();},true);
+const globalStop799=globalStopUi796;globalStopUi796=function(){disableRepeat799();loopEnabled=false;return globalStop799();};
+const recordStart799=startMasterRecording;startMasterRecording=async function(target){
+ if(calibration799?.busy)return;groupEdit799=false;for(const id of [...edits797.keys()])discardEdit797(id,true);
+ if(!repeat799.enabled)rec780.punch799=hasSelection()?{a:fragmentStart,b:fragmentEnd}:null;
+ return recordStart799(target);
+};
+// Standard preroll also leaves recorded media audible until punch-in.
+const legacyStart799=startMasterRecordingLegacy780;startMasterRecordingLegacy780=async function(){
+ if(hasSelection()&&getCurrentTime()<fragmentStart-.001){const loop=loopEnabled;loopEnabled=false;try{return await legacyStart799();}finally{loopEnabled=loop;refreshRepeat799();}}
+ return legacyStart799();
+};
+const clearProject799=clearProjectState;clearProjectState=function(...args){disableRepeat799();groupEdit799=false;return clearProject799(...args);};
+refreshRepeat799();renderEditRegions797();
+// Calibration measures the same ScriptProcessor input path used for recording.
+const calibration799={busy:false,overlay:null,cancelled:false,measured:null};
+function refreshCalibration799(){const button=document.getElementById('calibrate799');if(button){button.disabled=masterRecording||masterRecordArmed||rec780.busy||calibration799.busy;button.title=button.disabled?'Stop recording or wait for the current audio operation':'Measure recording latency with test chirps';}}
+function makeChirp799(rate){
+ const length=Math.round(rate*.045),samples=new Float32Array(length);let phase=0;
+ for(let i=0;i<length;i++){const t=i/length,f=800+2200*t;phase+=2*Math.PI*f/rate;samples[i]=Math.sin(phase)*Math.sin(Math.PI*t)**2*.18;}
+ return samples;
+}
+// Normalized matched filtering at 8 kHz, coarse search then exact local refinement.
+async function detectChirps799(samples,rate,starts,template,anchor,onProgress=()=>{},cancelled=()=>false){
+ const step=Math.max(1,Math.floor(rate/8000)),targetRate=rate/step;
+ const signal=Float32Array.from({length:Math.floor(samples.length/step)},(_,i)=>samples[i*step]);
+ const shape=Float32Array.from({length:Math.floor(template.length/step)},(_,i)=>template[i*step]);
+ let shapeEnergy=0;for(const v of shape)shapeEnergy+=v*v;
+ const offsets=[];
+ for(let n=0;n<starts.length;n++){
+  if(cancelled())throw new Error('Calibration cancelled');
+  const expected=(starts[n]-anchor)*targetRate;
+  let peak=-1,best=0;
+  const score=pos=>{let dot=0,energy=0;for(let j=0;j<shape.length;j++){const v=signal[pos+j]||0;dot+=v*shape[j];energy+=v*v;}return energy>1e-10?Math.abs(dot)/Math.sqrt(energy*shapeEnergy):0;};
+  const lo=Math.max(0,Math.floor(expected-.05*targetRate)),hi=Math.min(signal.length-shape.length,Math.ceil(expected+1.5*targetRate));
+  for(let i=lo;i<=hi;i+=4){const value=score(i);if(value>peak){peak=value;best=i;}}
+  const near=best;for(let i=Math.max(lo,near-5);i<=Math.min(hi,near+5);i++){const value=score(i);if(value>peak){peak=value;best=i;}}
+  if(peak<.23)throw new Error('Test chirps were not detected clearly. Move the microphone closer and retry.');
+  offsets.push((best-expected)/targetRate*1000);onProgress((n+1)/starts.length);await new Promise(r=>setTimeout(r,0));
+ }
+ offsets.sort((a,b)=>a-b);const median=offsets[Math.floor(offsets.length/2)],spread=offsets[offsets.length-1]-offsets[0];
+ if(median<0||median>1500||spread>25)throw new Error('Measurements are inconsistent. Check the input, reduce background noise and retry.');
+ return {milliseconds:Math.round(median),spread:Math.round(spread),offsets};
+}
+function calibrationDialog799(){
+ if(masterRecording||masterRecordArmed||rec780.busy||calibration799.overlay)return;
+ const overlay=document.createElement('div');overlay.className='calibration-overlay799';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');
+ const card=document.createElement('section');card.className='calibration-card799';const title=document.createElement('h3');title.textContent='Recording latency calibration';
+ const message=document.createElement('p');message.textContent='Place the microphone close to a speaker or headphone earpiece. Turn off direct monitoring on your audio interface to prevent feedback. MyNus monitoring will be temporarily disabled. Short test chirps will play to measure the recording delay.';
+ const progress=document.createElement('progress');progress.max=1;progress.value=0;progress.hidden=true;
+ const buttons=document.createElement('div');buttons.className='buttons799';
+ const start=document.createElement('button'),apply=document.createElement('button'),cancel=document.createElement('button');start.textContent='Start';apply.textContent='Apply';cancel.textContent='Cancel';apply.hidden=true;
+ buttons.append(start,apply,cancel);card.append(title,message,progress,buttons);overlay.append(card);document.body.append(overlay);calibration799.overlay=overlay;
+ const close=()=>{calibration799.cancelled=true;if(calibration799.busy){message.textContent='Cancelling…';return;}overlay.remove();calibration799.overlay=null;};
+ cancel.onclick=close;overlay.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Escape')close();});
+ start.onclick=async()=>{
+  if(calibration799.busy||masterRecording||masterRecordArmed||rec780.busy)return;
+  pauseAll();calibration799.busy=true;calibration799.cancelled=false;start.disabled=true;apply.hidden=true;progress.hidden=false;progress.value=0;refreshCalibration799();
+  message.textContent='Playing and recording test chirps. Keep the microphone still…';
+  try{const result=await runCalibration799(value=>progress.value=value);if(calibration799.cancelled)return;
+   calibration799.measured=result.milliseconds;message.textContent='Measured offset: '+result.milliseconds+' ms · Variation: '+result.spread+' ms';apply.hidden=false;start.textContent='Retry';report799('Calibration measured '+result.milliseconds+' ms (variation '+result.spread+' ms)');
+  }catch(error){if(!calibration799.cancelled){message.textContent=error.message;start.textContent='Retry';report799('Calibration: '+error.message,true);}}
+  finally{calibration799.busy=false;start.disabled=false;progress.hidden=true;refreshCalibration799();if(calibration799.cancelled){overlay.remove();calibration799.overlay=null;}}
+ };
+ apply.onclick=()=>{const input=document.getElementById('micOffset798');input.value=String(calibration799.measured);input.dispatchEvent(new Event('change',{bubbles:true}));report799('Rec offset set to '+input.value+' ms');close();};
+ start.focus();
+}
+async function runCalibration799(onProgress){
+ const mic=window.mynusMicrophone770;if(!mic)throw new Error('Microphone input is unavailable');
+ const wasEnabled=mic.enabled(),monitor=document.getElementById('micMonitor770'),wasMonitoring=monitor.textContent.includes('On');
+ let input,processor,silent,ctx,firstTime=null,total=0;const blocks=[],sources=[];
+ try{
+  mic.monitorOff();if(!mic.enabled())await mic.enable();if(calibration799.cancelled)throw new Error('Calibration cancelled');if(!mic.enabled())throw new Error('Enable the microphone and allow access to continue.');
+  mic.monitorOff();ensureMixAudioGraph();ctx=mixAudioContext;if(ctx.state==='suspended')await ctx.resume();
+  input=mic.input();processor=ctx.createScriptProcessor(2048,2,2);silent=ctx.createGain();silent.gain.value=0;processor.connect(silent);silent.connect(outputDestination793());input.connect(processor);
+  processor.onaudioprocess=event=>{if(calibration799.cancelled)return;const buffer=event.inputBuffer;if(firstTime===null)firstTime=ctx.currentTime-buffer.length/ctx.sampleRate;const data=new Float32Array(buffer.length);for(let i=0;i<data.length;i++){let sum=0;for(let ch=0;ch<buffer.numberOfChannels;ch++)sum+=buffer.getChannelData(ch)[i];data[i]=sum/buffer.numberOfChannels;}blocks.push(data);total+=data.length;};
+  const chirp=makeChirp799(ctx.sampleRate),audio=ctx.createBuffer(1,chirp.length,ctx.sampleRate);audio.getChannelData(0).set(chirp);
+  const starts=[.65,2.65,4.65].map(t=>ctx.currentTime+t);
+  for(const at of starts){const source=ctx.createBufferSource();source.buffer=audio;source.connect(outputDestination793());source.start(at);sources.push(source);}
+  const deadline=starts[2]+1.7;
+  while(ctx.currentTime<deadline){if(calibration799.cancelled)throw new Error('Calibration cancelled');onProgress(Math.max(0,Math.min(.7,(ctx.currentTime-starts[0]+.65)/(deadline-starts[0]+.65)*.7)));await new Promise(r=>setTimeout(r,40));}
+  processor.onaudioprocess=null;
+  if(firstTime===null||!total)throw new Error('No input audio received. Check the selected microphone.');
+  const joined=new Float32Array(total);let at=0;for(const block of blocks){joined.set(block,at);at+=block.length;}
+  return await detectChirps799(joined,ctx.sampleRate,starts,chirp,firstTime,value=>onProgress(.7+.3*value),()=>calibration799.cancelled);
+ }finally{
+  if(processor)processor.onaudioprocess=null;
+  try{input?.disconnect(processor);}catch(_){}for(const node of [processor,silent,...sources]){try{node?.stop?.();node?.disconnect();}catch(_){}}
+  if(wasMonitoring&&mic.enabled()&&!monitor.textContent.includes('On'))monitor.click();
+  if(!wasEnabled&&mic.enabled())document.getElementById('micEnable770').click();
+ }
+}
+const calibrateButton799=document.createElement('button');calibrateButton799.type='button';calibrateButton799.id='calibrate799';calibrateButton799.textContent='Calibrate';calibrateButton799.onclick=calibrationDialog799;
+document.querySelector('.mic-heading798 strong').after(calibrateButton799);refreshCalibration799();
+
+
+const confirm799=confirmEdit797;
+confirmEdit797=async function(id){if(edits797.has(id))excludedGroupEdits799.add(id);try{return await confirm799(id);}finally{renderEditRegions797();updateRecControls780();}};
+
+const fullKeys799=document.getElementById('lyricsFullScreenKeysMenu');
+if(fullKeys799){const header=document.createElement('div');header.className='keys-heading799';header.textContent='Click inside MyNus to enable keyboard shortcuts.';fullKeys799.prepend(header);for(const row of fullKeys799.children){const key=row.querySelector('span');if(key?.textContent==='Backspace')row.lastElementChild.textContent='Stop';}}
+// Fullscreen uses the same mode reset and REC Off semantics as the main transport.
+document.getElementById('lyricsFullScreenStopBtn')?.addEventListener('click',()=>{disableRepeat799();loopEnabled=false;loopBtn.classList.remove('active');syncTransportMirrors();},true);
+document.getElementById('lyricsFullScreenRecBtn')?.addEventListener('click',e=>{
+ if(!repeat799.enabled||(!masterRecording&&!masterRecordArmed&&!repeat799.intent))return;
+ e.preventDefault();e.stopImmediatePropagation();repeat799.intent=null;finalizeTake799().then(()=>restartRepeat799(false)).catch(error=>report799(error.message,true));
+},true);
 </script>
 </body>
 </html>
